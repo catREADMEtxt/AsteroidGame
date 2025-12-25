@@ -1,15 +1,14 @@
 
-import javax.swing.*;
-import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
-import java.awt.image.BufferedImage;
+import java.awt.geom.Point2D;
 import java.io.*;
 import java.util.*;
 import java.util.List;
-import java.awt.geom.Point2D;
+import javax.swing.*;
+import javax.swing.Timer;
 
-public class AsteroidGame extends JPanel implements ActionListener, KeyListener {
+public final class AsteroidGame extends JPanel implements ActionListener, KeyListener {
 	// Constants
     private static final int WIDTH = 1200, HEIGHT = 700;
    
@@ -25,14 +24,16 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	private int levelDisplayAlpha = 255; // for fade out effect
 	private int levelTimer = 30 * 60; // 30 seconds * 60 FPS (assuming 60 FPS)
 	private int errorMessageCountdown = 3 * 60; // countdown for errorMessage display
-	private boolean deathScreenActive = false;
 	private boolean levelStarting = false; 
 		
 	// Asteroids
-	private List<Asteroid> asteroids = new ArrayList<>();
+	private final List<Asteroid> asteroids = new ArrayList<>();
 	
 	// Bullets
-	private List<Bullet> bullets = new ArrayList<>();
+	private final List<Bullet> bullets = new ArrayList<>();
+
+	// Void Lasers
+	private final List<VoidLaser> voidLasers = new ArrayList<>();
 
 	//thrust
     private boolean thrusting = false;
@@ -40,14 +41,16 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
     private boolean rotatingRight = false;
     
     // Game General
-    private Random rand = new Random();
+    private final Random rand = new Random();
     private boolean noSavedGame = false;
     private Ship ship;
-    private Timer timer;
+    private final Timer timer;
     private String gameState = "menu"; // "menu", "playing", "paused", "death"
-    private int vx = 0, vy = 0;
     private int level = 0;
-    private boolean bulletDeath;
+    
+	// Deaths
+	private boolean voidDeath;
+	private boolean bulletDeath;
     private boolean asteroidDeath;
 
     // UI Buttons
@@ -56,7 +59,7 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	// Best Score & Duration
 	private int highestScore, highestDuration;
     // Save system
-    private File saveFile = new File("save.dat");
+    private final File saveFile = new File("save.dat");
 
     public AsteroidGame() {
         ship = new Ship();
@@ -94,18 +97,26 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
         add(resumeBtn);
         
         resumeBtn.addMouseListener(new MouseAdapter() {
-        	public void mouseEntered(MouseEvent e) {resumeBtn.setBackground(Color.LIGHT_GRAY); resumeBtn.setForeground(Color.DARK_GRAY);}
+        	@Override
+			public void mouseEntered(MouseEvent e) {resumeBtn.setBackground(Color.LIGHT_GRAY); resumeBtn.setForeground(Color.DARK_GRAY);}
+            @Override
         	public void mouseExited(MouseEvent e) {resumeBtn.setBackground(Color.DARK_GRAY); resumeBtn.setForeground(Color.WHITE);}
-        	public void mousePressed(MouseEvent e) {}
-        	public void mouseReleased(MouseEvent e) {}        	
+        	@Override
+			public void mousePressed(MouseEvent e) {}
+        	@Override
+			public void mouseReleased(MouseEvent e) {}        	
         });
         
-        newGameBtn.addMouseListener(new MouseAdapter() {
-        	public void mouseEntered(MouseEvent e) {newGameBtn.setBackground(Color.LIGHT_GRAY); newGameBtn.setForeground(Color.DARK_GRAY);}
-        	public void mouseExited(MouseEvent e) {newGameBtn.setBackground(Color.DARK_GRAY); newGameBtn.setForeground(Color.WHITE);}
-        	public void mousePressed(MouseEvent e) {}
-        	public void mouseReleased(MouseEvent e) {}        	
-        });
+		newGameBtn.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseEntered(MouseEvent e) {newGameBtn.setBackground(Color.LIGHT_GRAY); newGameBtn.setForeground(Color.DARK_GRAY);}
+			@Override
+			public void mouseExited(MouseEvent e) {newGameBtn.setBackground(Color.DARK_GRAY); newGameBtn.setForeground(Color.WHITE);}
+			@Override
+			public void mousePressed(MouseEvent e) {}
+			@Override
+			public void mouseReleased(MouseEvent e) {}        	
+		});
     }
     
 	void startNewGame() {
@@ -115,8 +126,9 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	    ship = new Ship();
 	    asteroids.clear();
 	    bullets.clear();
+		voidLasers.clear();
 	    thrusting = rotatingLeft = rotatingRight = false;
-	    bulletDeath = asteroidDeath = false;
+	    bulletDeath = asteroidDeath = voidDeath = false;
 	
 	    // Remove menu buttons if present
 	    if (newGameBtn.getParent() != null) remove(newGameBtn);
@@ -127,7 +139,8 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	    levelDisplayAlpha = 255;
 	    
 	    // Clear Previous Game Progress
-	    try (FileWriter writer = new FileWriter(saveFile, false)) {} catch (IOException e) { e.printStackTrace(); }
+	    try (FileWriter writer = new FileWriter(saveFile, false)) {} 
+		catch (IOException e) { e.printStackTrace(); }
 
 	    revalidate();
 	    repaint();
@@ -247,8 +260,6 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 		highestScore = Math.max(savedHighScore, currentScore);
 		highestDuration = Math.max(savedHighDuration, currentDuration);
 
-	    
-	    deathScreenActive = true;
 	    deathCountdown = 5 * 60;  // reset to 5 seconds at 60 FPS
 	    gameState = "death";  // new game state for death screen
 	    //bullets.clear();
@@ -266,6 +277,21 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	    		}
 	    	}
 	    } else if (gameState.equals("playing")) {
+			// Update void energy
+			ship.getVoidEnergy().update();
+			
+			// Check if void energy exceeded threshold
+			if (ship.getVoidEnergy().isOverThreshold()) {
+				voidDeath = true;
+				startDeathSequence();
+				return;
+			}
+			
+			// If void energy depleted while active, deactivate
+			if (ship.getVoidEnergy().isActive() && ship.getVoidEnergy().getEnergy() <= 0) {
+				ship.getVoidEnergy().deactivate();
+			}
+
 			// Decrement the level timer every tick (frame)
 		    if (levelStarting) {
 	            levelStartCountdown--;
@@ -308,10 +334,55 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	        ship.updatePhysics();
 	
 	        // Bullet & Asteroid Collision, Addition, and Removal
-	        checkAsteroidCollision();
-	
+	        if (!ship.getVoidEnergy().isActive()) {
+				checkAsteroidCollision();
+			}
+			
+			// Update and check void lasers
+			List<VoidLaser> lasersToRemove = new ArrayList<>();
+			List<Asteroid> newAsteroids = new ArrayList<>();
+			
+			for (VoidLaser laser : voidLasers) {
+				if (!laser.isAlive()) {
+					lasersToRemove.add(laser);
+					continue;
+				}
+				
+				for (Asteroid asteroid : asteroids) {
+					if (laser.intersects(asteroid.getBounds())) {
+						if (asteroid.getSize() == Asteroid.Size.SMALL) {
+							asteroids.remove(asteroid);
+						} else {
+							asteroids.remove(asteroid);
+							newAsteroids.addAll(asteroid.split());
+						}
+						
+						switch (asteroid.getSize()) {
+							case LARGE:
+								score += 20;
+								largeDestroyed++;
+								ship.addFuel(20);
+								break;
+							case MEDIUM:
+								score += 10;
+								mediumDestroyed++;
+								ship.addFuel(10);
+								break;
+							case SMALL:
+								score += 5;
+								smallDestroyed++;
+								ship.addFuel(5);
+								break;
+						}
+						break;
+					}
+				}
+			}
+			voidLasers.removeAll(lasersToRemove);
+			asteroids.addAll(newAsteroids);
+
 	        List<Bullet> toRemove = new ArrayList<>();
-	        List<Asteroid> newAsteroids = new ArrayList<>();
+	        newAsteroids = new ArrayList<>();
 	
 	        for (Bullet bullet : bullets) {
 	            bullet.update(WIDTH, HEIGHT);
@@ -348,19 +419,18 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	            }
 	
 	            // Ship hit by bullet
-	            if (bullet.getBounds().intersects(ship.getBounds().getBounds2D())) {
-	                bulletDeath = true;
-	                startDeathSequence();
-	                return;
-	            }
+	            if (!ship.getVoidEnergy().isActive() && bullet.getBounds().intersects(ship.getBounds().getBounds2D())) {
+					bulletDeath = true;
+					startDeathSequence();
+					return;
+				}
 	        }
-	
 	        bullets.removeAll(toRemove);
 	        asteroids.addAll(newAsteroids);
+
 		} else if (gameState.equals("death")) {
 			deathCountdown--;
 		    if (deathCountdown <= 0) {
-		        deathScreenActive = false;
 		        gameState = "menu";
 		        setupMenu();
 		    }
@@ -393,8 +463,12 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	            "2. Left and right arrows: rotate",
 	            "3. Space: Hyper mode (thrust faster)",
 	            "4. [S]: shoot bullets",
-	            "5. [ESC]: pause and save game, press again to restart the game, game progress will be saved",
-	            "", "",
+				"5. [D]: Enter/Exit Void World (purple dimension)",
+	            "6. [ESC]: pause and save game, press again to restart the game, game progress will be saved",
+				"", "",
+				"VOID WORLD: Asteroids become translucent, actions consume void energy.",
+				"Exit before void energy reaches 100 or you'll be consumed!",
+				"", "",
 	            "press [ENTER] here at home page to immediately start a new game"
 	        };
 	
@@ -448,15 +522,39 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	        	g.drawString(errorMessage, WIDTH / 2 - fm.stringWidth(errorMessage) / 2, HEIGHT - fm.getAscent() - boxHeight - padding * 2);
 	        }
 	    } else if (gameState.equals("playing")) {
-		    // Asteroids
-	        for (Asteroid a : asteroids) { a.draw(g2); }
+		    // Draw asteroids (translucent if in void world)
+			if (ship.getVoidEnergy().isActive()) {
+				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.3f));
+			}
+			for (Asteroid a : asteroids) { 
+				a.draw(g2); 
+			}
+			if (ship.getVoidEnergy().isActive()) {
+				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
+			}
 	
-	        // Ship
+	        // Draw ship
 	        ship.draw(g);
 	
-	        // Bullets
-	        for (Bullet b : bullets) { b.draw(g2); }	
+	        // Draw bullets (translucent if in void world)
+			if (ship.getVoidEnergy().isActive()) {
+				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.3f));
+			}
+			for (Bullet b : bullets) { 
+				b.draw(g2); 
+			}
+			if (ship.getVoidEnergy().isActive()) {
+				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
+			}
+
+			// Draw void lasers
+			for (VoidLaser laser : voidLasers) {
+				laser.draw(g2);
+			}
 			
+			// Draw void energy bar at the end
+        	ship.getVoidEnergy().drawBar(g2, WIDTH, HEIGHT);
+
 			// Level Starting Countdown
 			if (levelStarting) {
 			    // Starting Countdoan Display
@@ -508,7 +606,14 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 				
 				g.drawString(scoreText, WIDTH - fm.stringWidth(scoreText) - 20, 40);
 				g.drawString(fuelText, WIDTH - fm.stringWidth(fuelText) - 20, 40 + fm.getAscent());
-			}	
+			}
+
+			// Apply purple overlay if in void world
+			if (ship.getVoidEnergy().isActive()) {
+				g2.setColor(new Color(80, 0, 120, 100));
+				g2.fillRect(0, 0, WIDTH, HEIGHT);
+			}
+
 	    } else if (gameState.equals("paused")) {
 	    	g.setColor(Color.WHITE);
 	    	Font resumeFont = new Font("Serif", Font.BOLD, 18);
@@ -534,7 +639,10 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 			g2.drawString(deathText, WIDTH / 2 - g2.getFontMetrics().stringWidth(deathText) / 2, HEIGHT / 3 - textHeight / 2 - 80);
 			
 			g2.setFont(new Font("Serif", Font.PLAIN, 30));
-			String deathCause = bulletDeath ? "YOU WERE SHOT BY YOUR OWN BULLET" : asteroidDeath ? "YOU WERE HIT BY AN ASTEROID" : "UNKOWN DEATH";
+			String deathCause = voidDeath ? "FULLY CONSUMED BY THE VOID" : 
+                           		bulletDeath ? "YOU WERE SHOT BY YOUR OWN BULLET" : 
+                           		asteroidDeath ? "YOU WERE HIT BY AN ASTEROID" : 
+                           		"UNKNOWN DEATH";			
 			textHeight = g2.getFontMetrics().getAscent();
 			g2.drawString(deathCause, WIDTH / 2 - g2.getFontMetrics().stringWidth(deathCause) / 2, HEIGHT / 3 - textHeight);
 	
@@ -559,7 +667,26 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 			g2.drawString(fuelText, WIDTH / 2 - g2.getFontMetrics().stringWidth(fuelText) / 2, statsY + 120);
 		}
 	}
-	
+	private void toggleVoidWorld() {
+		VoidEnergy ve = ship.getVoidEnergy();
+		
+		if (ve.isActive()) {
+			// Exiting void world - check for collision
+			ve.deactivate();
+			
+			// Check immediate collision with asteroids
+			for (Asteroid a : asteroids) {
+				if (a.intersects(ship.getBounds())) {
+					asteroidDeath = true;
+					startDeathSequence();
+					return;
+				}
+			}
+		} else {
+			// Entering void world
+			ve.activate();
+		}
+	}
     @Override
     public void keyPressed(KeyEvent e) {
     	if (gameState.equals("menu")){
@@ -572,21 +699,26 @@ public class AsteroidGame extends JPanel implements ActionListener, KeyListener 
 	            case KeyEvent.VK_LEFT -> rotatingLeft = true;
 	            case KeyEvent.VK_RIGHT -> rotatingRight = true;
 	            case KeyEvent.VK_SPACE -> ship.setHyper(true);
+				case KeyEvent.VK_D -> toggleVoidWorld();
 	            case KeyEvent.VK_ESCAPE -> {
 	            	gameState = "paused";
 	                saveGame();
 	                setupPauseMenu();
 	            }
-	            case KeyEvent.VK_S -> {
-				    Point2D.Double tip = ship.getTipPosition();
-
-					// Push bullet spawn point a bit further forward along the ship's facing direction
-					double bulletSpawnDistance = 30;  // tweak this value if needed
-					
-					double spawnX = tip.x + bulletSpawnDistance * Math.sin(ship.getAngle());
-					double spawnY = tip.y - bulletSpawnDistance * Math.cos(ship.getAngle());
-					
-					bullets.add(new Bullet(spawnX, spawnY, ship.getAngle()));
+				case KeyEvent.VK_S -> {
+					if (ship.getVoidEnergy().isActive()) {
+						// Fire void laser
+						Point2D.Double tip = ship.getTipPosition();
+						voidLasers.add(new VoidLaser(tip.x, tip.y, ship.getAngle(), WIDTH, HEIGHT));
+						ship.getVoidEnergy().consumeForAction(2.0);
+					} else {
+						// Fire normal bullet
+						Point2D.Double tip = ship.getTipPosition();
+						double bulletSpawnDistance = 30;
+						double spawnX = tip.x + bulletSpawnDistance * Math.sin(ship.getAngle());
+						double spawnY = tip.y - bulletSpawnDistance * Math.cos(ship.getAngle());
+						bullets.add(new Bullet(spawnX, spawnY, ship.getAngle()));
+					}
 				}
 			}
         } else if (gameState.equals("paused")) {

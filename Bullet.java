@@ -3,8 +3,8 @@ import java.awt.geom.Ellipse2D;
 
 public class Bullet {
     private double x, y;      // Position
-    private double angle;     // Direction in radians
-    private double speed = 7; // Speed of the bullet
+    private final double angle;     // Direction in radians
+    private final double speed = 7; // Speed of the bullet
     private final int radius = 2; // Size of the bullet
 
     public Bullet(double x, double y, double angle) {
