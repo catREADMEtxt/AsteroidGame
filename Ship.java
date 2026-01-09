@@ -1,7 +1,5 @@
 import java.awt.*;
 import java.awt.geom.AffineTransform;
-import java.awt.Polygon;
-import java.awt.Shape;
 import java.awt.geom.PathIterator;
 import java.awt.geom.Point2D;
 
@@ -24,7 +22,7 @@ public class Ship {
     // Rotation and thrust
     private double angle = 0; // in radians
     private final double thrustPower = 0.05;
-    private final double rotationSpeed = Math.toRadians(2.5); // radians per update
+    private final double rotationSpeed = Math.toRadians(1); // radians per update
     private int thrustDuration = 0; // How long thrust is being applied (in frames)
 	private final int maxThrustDuration = 30; // Duration to reach max flame size
 	private boolean isThrusting = false;
@@ -36,49 +34,124 @@ public class Ship {
 
     // Void
 	private VoidEnergy voidEnergy = new VoidEnergy();
+
+	// Fade
+	private boolean fadeMode = false;
 	
 	// Fuel
-    private double fuel = 200;
-    
-    public void addFuel(int gain) { fuel += gain; }
-	public void setHyper(boolean active) { hyper = active; }
-	
-	public void applyThrust() {
-	    if (voidEnergy.isActive()) {
-        double multiplier = hyper ? hyperMultiplier * 1.2 : 1.2; // 20% faster with void
-        double ax = multiplier * thrustPower * Math.sin(angle);
-        double ay = -multiplier * thrustPower * Math.cos(angle);
-        vx += ax;
-        vy += ay;
-        voidEnergy.consumeForAction(hyper ? 0.8 : 0.4);
-        isThrusting = true;
-        if (thrustDuration < maxThrustDuration) thrustDuration++;
-    } else {
-        if (fuel <= 0) {
-            isThrusting = false;
-            thrustDuration = 0;
-            return;
-        }
-        
-        double multiplier = hyper ? hyperMultiplier : 1;
-        double ax = multiplier * thrustPower * Math.sin(angle);
-        double ay = -multiplier * thrustPower * Math.cos(angle);
-        vx += ax;
-        vy += ay;
-        fuel -= hyper ? hyperFuelCost : 1;
-        if (fuel < 0) fuel = 0;
-        isThrusting = true;
-        if (thrustDuration < maxThrustDuration) thrustDuration++;
-    }
+    private double fuel = 500;
+	private final double maxFuel = 1000;
+    	
+	private void drawFuelIndicator(Graphics2D g2d) {
+		double fuelPercent = fuel / maxFuel;
+		
+		// Determine color based on fuel level
+		Color fuelColor;
+		if (fuelPercent > 0.7) {
+			fuelColor = new Color(0, 255, 100); // Green
+		} else if (fuelPercent > 0.4) {
+			fuelColor = new Color(255, 200, 0); // Yellow
+		} else if (fuelPercent > 0.2) {
+			fuelColor = new Color(255, 100, 0); // Orange
+		} else {
+			fuelColor = new Color(255, 0, 0); // Red
+		}
+		
+		// Calculate arc angle (180 degrees max for semicircle)
+		int arcAngle = (int) (180 * fuelPercent);
+		
+		// Semicircle parameters
+		int radius = 18;
+		int startAngle = 90; // Start from bottom, grow symmetrically upward
+		
+		// Draw background arc (empty fuel)
+		g2d.setColor(new Color(40, 40, 40, 150));
+		g2d.setStroke(new BasicStroke(3));
+		g2d.drawArc(-radius, -radius, radius * 2, radius * 2, startAngle, 180);
+		
+		// Draw fuel arc (filled)
+		if (arcAngle > 0) {
+			// Start from center (90 degrees) and grow both ways
+			int leftAngle = 90 + arcAngle / 2;
+			int rightAngle = -arcAngle;
+			
+			g2d.setColor(fuelColor);
+			g2d.setStroke(new BasicStroke(3));
+			g2d.drawArc(-radius, -radius, radius * 2, radius * 2, leftAngle, rightAngle);
+			
+			// Add glow for full fuel
+			if (fuelPercent > 0.9) {
+				g2d.setColor(new Color(0, 255, 100, 100));
+				g2d.setStroke(new BasicStroke(5));
+				g2d.drawArc(-radius, -radius, radius * 2, radius * 2, leftAngle, rightAngle);
+			}
+		}
+		
+		g2d.setStroke(new BasicStroke(1)); // Reset stroke
 	}
+
+	public void applyThrust() {
+	    if (voidEnergy.getEnergy() > 0) {
+        double multiplier = hyper ? hyperMultiplier * 1.2 : 1.2; // 20% faster with void energy
+        double ax = multiplier * thrustPower * Math.sin(angle);
+        double ay = -multiplier * thrustPower * Math.cos(angle);
+        vx += ax;
+        vy += ay;
+        
+		if (fadeMode) {
+			voidEnergy.dissipateForAction(0.2);		// Fade mode drains void energy faster
+		} else if (voidEnergy.isActive()) {
+			voidEnergy.absorbForAction(0.1);		// Absorb energy if in the Void, otherwise dissipate
+		} else if (voidEnergy.getEnergy() > 0) {
+			voidEnergy.dissipateForAction(0.1);
+		}
+        isThrusting = true;
+        if (thrustDuration < maxThrustDuration) thrustDuration++;
+		} else {
+			if (fuel <= 0) {
+				isThrusting = false;
+				thrustDuration = 0;
+				return;
+			}
+			
+			double multiplier = hyper ? hyperMultiplier : 1;
+			double ax = multiplier * thrustPower * Math.sin(angle);
+			double ay = -multiplier * thrustPower * Math.cos(angle);
+			vx += ax;
+			vy += ay;
+			fuel -= hyper ? hyperFuelCost : 1;
+			if (fuel < 0) fuel = 0;
+			isThrusting = true;
+			if (thrustDuration < maxThrustDuration) thrustDuration++;
+		}
+	}
+
     public void rotateLeft() {
-        double multiplier = hyper ? hyperMultiplier/2 : 1;
+        double multiplier = hyper ? hyperMultiplier*2 : 1;
         angle -= multiplier * rotationSpeed;
+
+		// Absorb energy if in the Void, otherwise dissipate
+		if (fadeMode) {
+			voidEnergy.dissipateForAction(0.2);		// Fade mode drains void energy faster
+		} else if (voidEnergy.isActive()) {
+			voidEnergy.absorbForAction(0.1);
+		} else if (voidEnergy.getEnergy() > 0) {
+			voidEnergy.dissipateForAction(0.1);
+		}
     }
 
     public void rotateRight() {
-        double multiplier = hyper ? hyperMultiplier/2 : 1;
+        double multiplier = hyper ? hyperMultiplier*2 : 1;
         angle += multiplier * rotationSpeed;
+
+		// Absorb energy if in the Void, otherwise dissipate
+		if (fadeMode) {
+			voidEnergy.dissipateForAction(0.2);		// Fade mode drains void energy faster
+		} else if (voidEnergy.isActive()) {
+			voidEnergy.absorbForAction(0.1);
+		} else if (voidEnergy.getEnergy() > 0) {
+			voidEnergy.dissipateForAction(0.1);
+		}
     }
 
 	public void draw(Graphics g) {
@@ -92,7 +165,18 @@ public class Ship {
     	if (voidEnergy.getEnergy() > 0) {
         	drawVoidAura(g2d);
     	}
+
+		// --- Draw fade aura if active ---
+		if (fadeMode) {
+			drawFadeAura(g2d);
+		}
 		
+		// Set transparency if in fade mode
+		if (fadeMode) {
+			float fadeAlpha = 0.3f + 0.2f * (float) Math.sin(System.currentTimeMillis() / 150.0);
+			g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, fadeAlpha));
+		}
+
 	    // --- Draw the spaceship body shape ---
 	    g2d.setColor(Color.WHITE);
 	    shipBody = new Polygon();
@@ -108,10 +192,15 @@ public class Ship {
 	        double flameProgress = (double) thrustDuration / maxThrustDuration;
 	        int flameWidth = 4;
 	        int flameHeight = (int) (8 * flameProgress) + 2; // Start small, grow
-			if (voidEnergy.isActive()) {
-				g2d.setColor(new Color(180, 0, 255));
-				flameHeight *= 1.5;
-	        }	else if (hyper) {
+			if (voidEnergy.getEnergy() > 0) {
+				if (hyper) {
+					g2d.setColor(Color.MAGENTA);
+					flameHeight *= 3; // longer flame
+				} else {
+					g2d.setColor(new Color(180, 0, 255));
+					flameHeight *= 2.5; // longer flame
+				}
+	        } else if (hyper) {
 			    g2d.setColor(Color.CYAN);
 			    flameHeight *= 2; // longer flame
 			} else {
@@ -124,12 +213,50 @@ public class Ship {
 	        g2d.fillPolygon(flame);
 	    }
 	    
+		// --- Draw fuel indicator ---
+    	drawFuelIndicator(g2d);
+		
 	    // Undo transformations
 	    g2d.rotate(-angle);
 	    g2d.translate(-x, -y);
 	}
 
-	// Void aura drawing methods
+	// --- Fade aura drawing methods ---
+	private void drawFadeAura(Graphics2D g2d) {
+		long time = System.currentTimeMillis();
+		
+		// Pulsing yellow/golden rings
+		for (int i = 0; i < 4; i++) {
+			int radius = 25 + i * 8;
+			int alpha = (int) (150 - i * 30 + 50 * Math.sin(time / 200.0 + i));
+			alpha = Math.max(0, Math.min(255, alpha));
+			
+			g2d.setColor(new Color(255, 255, 0, alpha));
+			g2d.setStroke(new BasicStroke(2));
+			g2d.drawOval(-radius, -radius, radius * 2, radius * 2);
+		}
+		
+		// Rotating yellow particles
+		for (int i = 0; i < 8; i++) {
+			double particleAngle = (2 * Math.PI * i / 8) + (time / 500.0);
+			int radius = 22;
+			int px = (int) (radius * Math.cos(particleAngle));
+			int py = (int) (radius * Math.sin(particleAngle));
+			
+			int alpha = (int) (200 + 55 * Math.sin(time / 150.0 + i));
+			g2d.setColor(new Color(255, 215, 0, alpha));
+			g2d.fillOval(px - 3, py - 3, 6, 6);
+		}
+		
+		// Energy waves
+		int waveRadius = (int) (20 + 15 * Math.sin(time / 300.0));
+		g2d.setColor(new Color(255, 255, 100, 80));
+		g2d.fillOval(-waveRadius, -waveRadius, waveRadius * 2, waveRadius * 2);
+		
+		g2d.setStroke(new BasicStroke(1));
+	}
+
+	// --- Void aura drawing methods ---
 	private void drawVoidAura(Graphics2D g2d) {
 		double energyPercent = voidEnergy.getEnergyPercent();
 		
@@ -161,10 +288,10 @@ public class Ship {
 	private void drawVoidDots(Graphics2D g2d, int count, int radius) {
 		g2d.setColor(new Color(180, 0, 255, 200));
 		for (int i = 0; i < count; i++) {
-			double angle = (2 * Math.PI * i / count) + (System.currentTimeMillis() / 1000.0);
-			int x = (int) (radius * Math.cos(angle));
-			int y = (int) (radius * Math.sin(angle));
-			g2d.fillOval(x - 2, y - 2, 4, 4);
+			double voidDotAngle = (2 * Math.PI * i / count) + (System.currentTimeMillis() / 1000.0);
+			int voidDotX = (int) (radius * Math.cos(voidDotAngle));
+			int voidDotY = (int) (radius * Math.sin(voidDotAngle));
+			g2d.fillOval(voidDotX - 2, voidDotY - 2, 4, 4);
 		}
 	}
 
@@ -172,11 +299,11 @@ public class Ship {
 		g2d.setColor(new Color(200, 0, 255, 150));
 		g2d.setStroke(new BasicStroke(1.5f));
 		for (int i = 0; i < count; i++) {
-			double angle = (2 * Math.PI * i / count) + (System.currentTimeMillis() / 800.0);
-			int x1 = (int) (12 * Math.cos(angle));
-			int y1 = (int) (12 * Math.sin(angle));
-			int x2 = (int) (length * Math.cos(angle));
-			int y2 = (int) (length * Math.sin(angle));
+			double voidLineAngle = (2 * Math.PI * i / count) + (System.currentTimeMillis() / 800.0);
+			int x1 = (int) (12 * Math.cos(voidLineAngle));
+			int y1 = (int) (12 * Math.sin(voidLineAngle));
+			int x2 = (int) (length * Math.cos(voidLineAngle));
+			int y2 = (int) (length * Math.sin(voidLineAngle));
 			g2d.drawLine(x1, y1, x2, y2);
 		}
 		g2d.setStroke(new BasicStroke(1));
@@ -256,11 +383,16 @@ public class Ship {
 	}
 	public double getAngle() { return angle; }
 	public VoidEnergy getVoidEnergy() { return voidEnergy; }
+	public double getMaxFuel() { return maxFuel; }
+	public boolean getFadeMode() { return fadeMode; }
 	
-	// Set Values
+	// Modify Values
 	public void setFuel(double newFuel) { fuel = newFuel; }
 	public void setX(double newX) { x = newX; }
 	public void setY(double newY) { y = newY; }
 	public void setAngle(double newAngle) { angle = newAngle; }
 	public void setVoidEnergy(VoidEnergy ve) { this.voidEnergy = ve; }
+	public void setHyper(boolean active) { hyper = active; }
+	public void addFuel(int gain) { fuel += gain; }
+	public void setFadeMode(boolean active) { fadeMode = active; }
 }

@@ -2,10 +2,10 @@ import java.awt.*;
 import java.awt.geom.Line2D;
 
 public class VoidLaser {
-    private double startX, startY;
-    private double angle;
-    private int screenWidth, screenHeight;
-    private int lifetime = 10; // frames the laser persists
+    private final double startX, startY;
+    private final double angle;
+    private final int screenWidth, screenHeight;
+    private final int lifetime = 10; // frames the laser persists
     private int currentFrame = 0;
     
     public VoidLaser(double startX, double startY, double angle, int screenWidth, int screenHeight) {

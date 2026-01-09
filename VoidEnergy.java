@@ -2,8 +2,8 @@ import java.awt.*;
 
 public class VoidEnergy {
     private double energy = 0;
-    private double maxEnergy = 100;
-    private double consumptionRate = 0.1; // Base passive consumption
+    private final double maxEnergy = 100;
+    private final double absorptionRate = 0.1; // Base passive absorption rate
     private double actionMultiplier = 1.0; // Increases with actions
     private boolean active = false;
     
@@ -18,8 +18,8 @@ public class VoidEnergy {
     
     public void update() {
         if (active) {
-            // Passive consumption
-            energy += consumptionRate * actionMultiplier;
+            // Passive absorption
+            energy += absorptionRate * actionMultiplier;
             if (energy > maxEnergy) {
                 energy = maxEnergy;
             }
@@ -27,12 +27,32 @@ public class VoidEnergy {
             // Slowly dissipate when not in void world
             energy -= 0.05;
             if (energy < 0) energy = 0;
+            
+            // Slowly reset action multiplier when not active
+            if (actionMultiplier > 1.0) {
+                actionMultiplier -= 0.02;
+                if (actionMultiplier < 1.0) actionMultiplier = 1.0;
+            }
         }
     }
     
-    public void consumeForAction(double amount) {
-        if (active) {
+    public void dissipateForAction(double amount) {
+        if (energy > 0) {
+            energy -= amount;
+            if (energy > maxEnergy) {
+                energy = maxEnergy;
+            }
+            // Increase action multiplier (caps at 3x)
+            actionMultiplier = Math.min(actionMultiplier + 0.05, 3.0);
+        }
+    }
+
+    public void absorbForAction(double amount) {
+        if (energy > 0) {
             energy += amount;
+            if (energy > maxEnergy) {
+                energy = maxEnergy;
+            }
             // Increase action multiplier (caps at 3x)
             actionMultiplier = Math.min(actionMultiplier + 0.05, 3.0);
         }
@@ -99,5 +119,9 @@ public class VoidEnergy {
         String text = String.format("VOID ENERGY: %.1f / %.0f", energy, maxEnergy);
         FontMetrics fm = g2d.getFontMetrics();
         g2d.drawString(text, barX + barWidth / 2 - fm.stringWidth(text) / 2, barY + barHeight / 2 + fm.getAscent() / 2 - 2);
+    }
+
+    public double getAbsorptionRate() {
+        return absorptionRate;
     }
 }
