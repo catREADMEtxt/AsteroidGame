@@ -181,4 +181,6 @@ public class VoidHazard {
     }
     
     public Type getType() { return type; }
+    public double getCenterX() { return x; }
+    public double getCenterY() { return y; }
 }

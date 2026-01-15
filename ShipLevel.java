@@ -29,7 +29,7 @@ public class ShipLevel {
         // Exponential growth: 20, 30, 45, 68, 102, 153, ...
         return (int)(20 * Math.pow(1.5, level - 1));
     }
-    
+    /*
     public boolean isAbilityUnlocked(String ability) {
         return switch (ability.toLowerCase()) {
             case "void" -> level >= VOID_UNLOCK_LEVEL;
@@ -42,7 +42,19 @@ public class ShipLevel {
             default -> false;
         };
     }
-    
+    */
+   public boolean isAbilityUnlocked(String ability) {
+        return switch (ability.toLowerCase()) {
+            case "void" -> true;
+            case "fade" -> true;
+            case "teleport" -> true;
+            case "shield" -> true;
+            case "timeslow" -> true;
+            case "drone" -> true;
+            case "nova" -> true;
+            default -> false;
+        };
+    }
     public void drawLevelUI(Graphics2D g2, int screenWidth, int screenHeight) {
         int panelX = 20;
         int panelY = 90;
@@ -63,7 +75,7 @@ public class ShipLevel {
         // Level text
         g2.setFont(new Font("Serif", Font.BOLD, 20));
         g2.setColor(borderColor);
-        String levelText = "LEVEL " + level;
+        String levelText = "SHIP LEVEL " + level;
         g2.drawString(levelText, panelX + 15, panelY + 28);
         
         // XP bar background
@@ -92,7 +104,7 @@ public class ShipLevel {
         String xpText = xp + " / " + xpToNextLevel + " XP";
         FontMetrics fm = g2.getFontMetrics();
         g2.drawString(xpText, barX + barWidth/2 - fm.stringWidth(xpText)/2, barY + 15);
-        
+        /*
         // Ability icons
         drawAbilityIcon(g2, "V", "Void", isAbilityUnlocked("void"), 
             panelX + 15, panelY + 75, new Color(180, 0, 255));
@@ -100,6 +112,8 @@ public class ShipLevel {
             panelX + 75, panelY + 75, new Color(255, 215, 0));
         drawAbilityIcon(g2, "T", "Tele", isAbilityUnlocked("teleport"), 
             panelX + 135, panelY + 75, new Color(0, 255, 200));
+            
+        */
     }
     
     private void drawAbilityIcon(Graphics2D g2, String key, String name, 
@@ -134,7 +148,7 @@ public class ShipLevel {
         return new Color(255, 215, 0); // Gold
     }
     
-    public void drawLevelUpEffect(Graphics2D g2, int shipx, int shipy, int frame) {
+    public void drawLevelUpEffect(Graphics2D g2, int shipx, int shipy, int WIDTH, int HEIGHT, int frame) {
         // Expanding circle effect
         int maxRadius = 400;
         int currentRadius = (int)(maxRadius * (frame / 60.0));
@@ -164,8 +178,8 @@ public class ShipLevel {
                 String text = "LEVEL UP!";
                 FontMetrics fm = g2.getFontMetrics();
                 g2.drawString(text, 
-                    shipx - fm.stringWidth(text)/2,
-                    shipy + fm.getAscent()/2);
+                    WIDTH / 2 - fm.stringWidth(text)/2,
+                    HEIGHT / 2 + fm.getAscent()/2);
             }
         }
     }

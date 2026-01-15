@@ -4,11 +4,13 @@ import java.awt.geom.Point2D;
 public class BlackHole {
     private double x, y;
     private int size = 80;
+    private int spawnTimer = 1 * 60;
     private float rotation = 0;
     private float pulse = 0;
     private final double pullStrength = 0.15;
     private final double pullRadius = 300;
     private final double eventHorizon = 40;
+    private boolean fullySpawned = false;
     
     public BlackHole(double x, double y) {
         this.x = x;
@@ -16,11 +18,16 @@ public class BlackHole {
     }
     
     public void update() {
+        if (spawnTimer > 0) {
+            spawnTimer--;
+            if (spawnTimer == 0) fullySpawned = true;
+        }
         rotation += 0.08f;
         pulse += 0.05f;
     }
     
     public Point2D.Double applyGravity(double shipX, double shipY) {
+        if (!fullySpawned) return new Point2D.Double(0, 0);
         double dx = x - shipX;
         double dy = y - shipY;
         double distance = Math.sqrt(dx * dx + dy * dy);
@@ -37,6 +44,7 @@ public class BlackHole {
     }
     
     public boolean isShipConsumed(double shipX, double shipY) {
+        if (!fullySpawned) return false;
         double dx = x - shipX;
         double dy = y - shipY;
         double distance = Math.sqrt(dx * dx + dy * dy);
@@ -44,6 +52,16 @@ public class BlackHole {
     }
     
     public void draw(Graphics2D g2d) {
+        // Spawn Animation
+        float spawnScale = fullySpawned ? 1.0f : (60 - spawnTimer) / 60.0f;
+        // Scale effect
+        if (!fullySpawned) {
+            int alpha = (int)(255 * spawnScale);
+            g2d.setColor(new Color(150, 100, 255, alpha));
+            int spawnSize = (int)(size * 2 * spawnScale);
+            g2d.fillOval((int)x - spawnSize, (int)y - spawnSize, spawnSize * 2, spawnSize * 2);
+        }
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, spawnScale));
         // Gravitational lensing effect (outer rings)
         for (int i = 5; i > 0; i--) {
             int radius = size + i * 30;
@@ -100,6 +118,7 @@ public class BlackHole {
         g2d.drawString(warning, (int)x - fm.stringWidth(warning)/2, (int)y - size);
         
         g2d.setStroke(new BasicStroke(1));
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
     }
     
     public double getX() { return x; }

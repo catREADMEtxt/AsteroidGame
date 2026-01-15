@@ -9,7 +9,9 @@ public class Asteroid{
     public enum Size { LARGE, MEDIUM, SMALL }
 
     private double x, y;
-    private final double vx, vy;
+    private double vx, vy;
+    private final double normalvx, normalvy;
+    private double slowedvx, slowedvy;
     private final Size size;
     private Polygon shape;
     private static double levelMultiplier;
@@ -21,6 +23,8 @@ public class Asteroid{
         this.y = y;
         this.vx = vx;
         this.vy = vy;
+        this.normalvx = vx;
+        this.normalvy = vy;
         levelMultiplier = 1;
         generateShape();
     }
@@ -130,4 +134,17 @@ public class Asteroid{
 
     public Size getSize() { return size; }
     public void setMultiplier(double newMultiplier) { levelMultiplier = newMultiplier; }
+    public void toggleTimeSlow(boolean isActive) {
+    	if (isActive) { 
+    		vx=slowedvx; 
+    		vy=slowedvy; 
+    	} else { 
+    		vx=normalvx;
+    		vy=normalvy; 
+    	}
+    }
+    public void setSlowedVelocity(double timeScale) {
+    	slowedvx = normalvx * timeScale;
+    	slowedvy = normalvy * timeScale;
+    }
 }

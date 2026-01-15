@@ -47,28 +47,28 @@ public class Ship {
 		
 		// Determine color based on fuel level
 		Color fuelColor;
-		if (fuelPercent > 0.7) {
+		if (fuelPercent > 0.7f) {
 			fuelColor = new Color(0, 255, 100); // Green
-		} else if (fuelPercent > 0.4) {
+		} else if (fuelPercent > 0.4f) {
 			fuelColor = new Color(255, 200, 0); // Yellow
-		} else if (fuelPercent > 0.2) {
+		} else if (fuelPercent > 0.2f) {
 			fuelColor = new Color(255, 100, 0); // Orange
 		} else {
 			fuelColor = new Color(255, 0, 0); // Red
 		}
 		
 		// Calculate arc angle (180 degrees max for semicircle)
-		int arcAngle = (int) (180 * fuelPercent);
+		int arcAngle = (int) (360 * fuelPercent);
 		
 		// Semicircle parameters
 		int radius = 18;
-		int startAngle = 90; // Start from bottom, grow symmetrically upward
-		
+		int startAngle = 90; // Start from tip, grow symmetrically upward
+		/*
 		// Draw background arc (empty fuel)
 		g2d.setColor(new Color(40, 40, 40, 150));
 		g2d.setStroke(new BasicStroke(3));
 		g2d.drawArc(-radius, -radius, radius * 2, radius * 2, startAngle, 180);
-		
+		*/
 		// Draw fuel arc (filled)
 		if (arcAngle > 0) {
 			// Start from center (90 degrees) and grow both ways
@@ -91,39 +91,44 @@ public class Ship {
 	}
 
 	public void applyThrust() {
+	    double multiplier;
+	    double ax, ay;
 	    if (voidEnergy.getEnergy() > 0) {
-        double multiplier = hyper ? hyperMultiplier * 1.2 : 1.2; // 20% faster with void energy
-        double ax = multiplier * thrustPower * Math.sin(angle);
-        double ay = -multiplier * thrustPower * Math.cos(angle);
-        vx += ax;
-        vy += ay;
-        
-		if (fadeMode) {
-			voidEnergy.dissipateForAction(0.2);		// Fade mode drains void energy faster
-		} else if (voidEnergy.isActive()) {
-			voidEnergy.absorbForAction(0.1);		// Absorb energy if in the Void, otherwise dissipate
-		} else if (voidEnergy.getEnergy() > 0) {
-			voidEnergy.dissipateForAction(0.1);
-		}
-        isThrusting = true;
-        if (thrustDuration < maxThrustDuration) thrustDuration++;
+	        multiplier = hyper ? hyperMultiplier * 1.2 : 1.2; // 20% faster with void energy
+	        ax = multiplier * thrustPower * Math.sin(angle);
+	        ay = -multiplier * thrustPower * Math.cos(angle);
+	        vx += ax;
+	        vy += ay;
+	        
+			if (fadeMode) {
+				voidEnergy.dissipateForAction(0.5);		// Fade mode drains void energy faster
+			} else if (voidEnergy.isActive()) {
+				voidEnergy.absorbForAction(0.1);		// Absorb energy if in the Void, otherwise dissipate
+			} else if (voidEnergy.getEnergy() > 0) {
+				voidEnergy.dissipateForAction(0.1);
+			}
+	    }
+	    
+	    isThrusting = true;
+	    if (thrustDuration < maxThrustDuration) {
+	     	thrustDuration++;
 		} else {
 			if (fuel <= 0) {
 				isThrusting = false;
 				thrustDuration = 0;
 				return;
 			}
-			
-			double multiplier = hyper ? hyperMultiplier : 1;
-			double ax = multiplier * thrustPower * Math.sin(angle);
-			double ay = -multiplier * thrustPower * Math.cos(angle);
-			vx += ax;
-			vy += ay;
-			fuel -= hyper ? hyperFuelCost : 1;
-			if (fuel < 0) fuel = 0;
-			isThrusting = true;
-			if (thrustDuration < maxThrustDuration) thrustDuration++;
 		}
+			
+		multiplier = hyper ? hyperMultiplier : 1;
+		ax = multiplier * thrustPower * Math.sin(angle);
+		ay = -multiplier * thrustPower * Math.cos(angle);
+		vx += ax;
+		vy += ay;
+		fuel -= hyper ? hyperFuelCost : 1;
+		if (fuel < 0) fuel = 0;
+		isThrusting = true;
+		if (thrustDuration < maxThrustDuration) thrustDuration++;
 	}
 
     public void rotateLeft() {
@@ -132,7 +137,7 @@ public class Ship {
 
 		// Absorb energy if in the Void, otherwise dissipate
 		if (fadeMode) {
-			voidEnergy.dissipateForAction(0.2);		// Fade mode drains void energy faster
+			voidEnergy.dissipateForAction(0.5);		// Fade mode drains void energy faster
 		} else if (voidEnergy.isActive()) {
 			voidEnergy.absorbForAction(0.1);
 		} else if (voidEnergy.getEnergy() > 0) {
@@ -146,13 +151,63 @@ public class Ship {
 
 		// Absorb energy if in the Void, otherwise dissipate
 		if (fadeMode) {
-			voidEnergy.dissipateForAction(0.2);		// Fade mode drains void energy faster
+			voidEnergy.dissipateForAction(0.5);		// Fade mode drains void energy faster
 		} else if (voidEnergy.isActive()) {
 			voidEnergy.absorbForAction(0.1);
 		} else if (voidEnergy.getEnergy() > 0) {
 			voidEnergy.dissipateForAction(0.1);
 		}
     }
+    
+    public void updatePhysics() {		
+		//clamp speed
+		double maxSpeed = hyper ? 8.0 : 2.5;
+		vx = Math.max(-maxSpeed, Math.min(maxSpeed, vx));
+		vy = Math.max(-maxSpeed, Math.min(maxSpeed, vy));
+
+		x += vx;
+	    y += vy;
+	    
+	    if (!isThrusting && thrustDuration > 0) {
+	        thrustDuration--; // Smooth fade out
+	    }
+	
+	    isThrusting = false; // Reset after each frame unless applyThrust is called again
+	    
+	    //loop universe
+		x = (x + universeWidth) % universeWidth;
+		y = (y + universeHeight) % universeHeight;
+
+	}
+
+	public Polygon getBounds() {
+	    // Define the ship's shape centered at origin
+	    Polygon ship = new Polygon();
+	    ship.addPoint(0, -bodyHeight / 2);
+	    ship.addPoint(-bodyWidth / 2, bodyHeight / 4);
+	    ship.addPoint(-bodyWidth / 4, bodyHeight / 2);
+	    ship.addPoint(bodyWidth / 4, bodyHeight / 2);
+	    ship.addPoint(bodyWidth / 2, bodyHeight / 4);
+	
+	    // Apply rotation and translation to get ship's position in world space
+	    AffineTransform transform = new AffineTransform();
+	    transform.translate(x, y);
+	    transform.rotate(angle);
+	
+	    Shape transformed = transform.createTransformedShape(ship);
+	
+	    // Convert transformed shape back to polygon
+	    Polygon transformedPoly = new Polygon();
+	    for (PathIterator pi = transformed.getPathIterator(null); !pi.isDone(); pi.next()) {
+	        double[] coords = new double[6];
+	        int type = pi.currentSegment(coords);
+	        if (type != PathIterator.SEG_CLOSE) {
+	            transformedPoly.addPoint((int) coords[0], (int) coords[1]);
+	        }
+	    }
+	
+	    return transformedPoly;
+	}
 
 	public void draw(Graphics g) {
 	    Graphics2D g2d = (Graphics2D) g;
@@ -317,56 +372,6 @@ public class Ship {
 			g2d.drawOval(-radius, -radius, radius * 2, radius * 2);
 		}
 	}
-	public void updatePhysics() {		
-		//clamp speed
-		double maxSpeed = hyper ? 8.0 : 2.5;
-		vx = Math.max(-maxSpeed, Math.min(maxSpeed, vx));
-		vy = Math.max(-maxSpeed, Math.min(maxSpeed, vy));
-
-		x += vx;
-	    y += vy;
-	    
-	    if (!isThrusting && thrustDuration > 0) {
-	        thrustDuration--; // Smooth fade out
-	    }
-	
-	    isThrusting = false; // Reset after each frame unless applyThrust is called again
-	    
-	    //loop universe
-		x = (x + universeWidth) % universeWidth;
-		y = (y + universeHeight) % universeHeight;
-
-	}
-
-	public Polygon getBounds() {
-	    // Define the ship's shape centered at origin
-	    Polygon ship = new Polygon();
-	    ship.addPoint(0, -bodyHeight / 2);
-	    ship.addPoint(-bodyWidth / 2, bodyHeight / 4);
-	    ship.addPoint(-bodyWidth / 4, bodyHeight / 2);
-	    ship.addPoint(bodyWidth / 4, bodyHeight / 2);
-	    ship.addPoint(bodyWidth / 2, bodyHeight / 4);
-	
-	    // Apply rotation and translation to get ship's position in world space
-	    AffineTransform transform = new AffineTransform();
-	    transform.translate(x, y);
-	    transform.rotate(angle);
-	
-	    Shape transformed = transform.createTransformedShape(ship);
-	
-	    // Convert transformed shape back to polygon
-	    Polygon transformedPoly = new Polygon();
-	    for (PathIterator pi = transformed.getPathIterator(null); !pi.isDone(); pi.next()) {
-	        double[] coords = new double[6];
-	        int type = pi.currentSegment(coords);
-	        if (type != PathIterator.SEG_CLOSE) {
-	            transformedPoly.addPoint((int) coords[0], (int) coords[1]);
-	        }
-	    }
-	
-	    return transformedPoly;
-	}
-
 
     // Getters for position, fuel, etc.
     public double getX() { return x; }

@@ -71,7 +71,7 @@ public class CosmicEntity {
         for (int i = 3; i > 0; i--) {
             int auraSize = bodySize + i * 20;
             int alpha = 40 - i * 10;
-            g2d.setColor(new Color(200, 0, 150, alpha));
+            g2d.setColor(new Color(55, 0, 155, alpha));
             g2d.fillOval((int)x - auraSize/2, (int)y - auraSize/2, auraSize, auraSize);
         }
         
@@ -112,7 +112,7 @@ public class CosmicEntity {
         // Pulsing core
         int coreSize = (int)(30 + 10 * Math.sin(pulse * 2));
         int coreAlpha = (int)(200 + 55 * Math.sin(pulse * 3));
-        g2d.setColor(new Color(255, 0, 150, coreAlpha));
+        g2d.setColor(new Color(100, 50, 200, coreAlpha));
         g2d.fillOval((int)x - coreSize/2, (int)y - coreSize/2, coreSize, coreSize);
     }
     

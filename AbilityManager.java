@@ -1,13 +1,14 @@
 import java.awt.*;
 
 public class AbilityManager {
-    private Ship ship;
     private static class Ability {
         String name;
         String key;
         boolean unlocked;
         boolean active;
         boolean onCooldown;
+        boolean drawFlash;
+        double flashTimer = 0.5 * 60;
         int cooldownTimer;
         int maxCooldown;
         Color color;
@@ -33,14 +34,19 @@ public class AbilityManager {
                 cooldownTimer--;
                 if (cooldownTimer <= 0) {
                     onCooldown = false;
+                    drawFlash = true;
                     cooldownTimer = 0;
                 }
+            } else if (drawFlash) {
+            	flashTimer--;
+            	if (flashTimer <= 0) {
+            		drawFlash = false;
+            		flashTimer = 0.5 * 60;
+            	}
             }
         }
         
-        float getCooldownPercent() {
-            return onCooldown ? (float)cooldownTimer / maxCooldown : 0f;
-        }
+        float getCooldownPercent() { return onCooldown ? (float)cooldownTimer / maxCooldown : 0f; }
     }
     
     private Ability voidAbility;
@@ -68,6 +74,8 @@ public class AbilityManager {
     private double droneOrbitAngle = 0;
     private int droneHealth = 3;
     private int droneFireTimer = 0;
+    private int droneSize = 12;
+    private int droneHitInvulnTimer = 3 * 60;
     
     // Nova Blast fields
     public enum NovaState { READY, CHARGING, EXPLODING, COOLDOWN }
@@ -77,15 +85,14 @@ public class AbilityManager {
     private double novaExplosionRadius = 0;
     private final int novaChargeDuration = 1 * 60; // 1 second charge
     
-    public AbilityManager(Ship shipObject) {
-    	ship = shipObject;
+    public AbilityManager() {
         voidAbility = new Ability("Void", "D", 3 * 60, new Color(180, 0, 255));
         fadeAbility = new Ability("Fade", "F", 8 * 60, new Color(255, 215, 0));
         teleportAbility = new Ability("Teleport", "T", 5 * 60, new Color(0, 255, 200));
         shieldAbility = new Ability("Shield", "Q", 12 * 60, new Color(100, 200, 255));
         timeSlowAbility = new Ability("Time", "R", 15 * 60, new Color(150, 255, 255));
         droneAbility = new Ability("Drone", "E", 20 * 60, new Color(255, 150, 100));
-        novaAbility = new Ability("Nova", "X", 60 * 60, new Color(255, 100, 255));
+        novaAbility = new Ability("Nova", "X", 1, new Color(255, 100, 255));
     }
     
     public void update() {
@@ -141,6 +148,8 @@ public class AbilityManager {
                 novaAbility.startCooldown();
                 novaExplosionRadius = 0;
             }
+        } else if (novaState == NovaState.COOLDOWN && !novaAbility.onCooldown) {
+        	novaState = NovaState.READY;
         }
     }
     
@@ -171,7 +180,7 @@ public class AbilityManager {
     }
     
     public boolean isTimeSlowActive() { return timeSlowActive; }
-    public float getTimeScale() { return timeSlowActive ? 0.3f : 1.0f; }
+    public float getTimeScale() { return 0.3f; }
     
     // Drone methods
     public boolean toggleDrone() {
@@ -209,9 +218,15 @@ public class AbilityManager {
         return new Point(dx, dy);
     }
     
-    public boolean canDroneFire() {
-        return droneDeployed && droneFireTimer <= 0;
+    public Polygon getDroneBounds(double shipX, double shipY) {
+        Point pos = getDronePosition(shipX, shipY);
+        if (pos == null) return new Polygon();
+        int[] xs = {pos.x, pos.x - droneSize/2, pos.x, pos.x + droneSize/2};
+        int[] ys = {pos.y - droneSize/2, pos.y + droneSize/2, pos.y + droneSize/4, pos.y + droneSize/2};
+        return new Polygon(xs, ys, 4);
     }
+    
+    public boolean canDroneFire() { return droneDeployed && droneFireTimer <= 0; }
     
     public void droneDidFire() {
         droneFireTimer = 30; // 0.5 second cooldown
@@ -220,7 +235,7 @@ public class AbilityManager {
     // Nova Blast methods
     public boolean activateNova(VoidEnergy voidEnergy) {
         if (!novaAbility.unlocked || novaState != NovaState.READY) return false;
-        if (voidEnergy.getEnergy() < 75) return false;
+        // if (voidEnergy.getEnergy() < 75) return false;
         
         novaState = NovaState.CHARGING;
         novaChargeTimer = 0;
@@ -262,7 +277,7 @@ public class AbilityManager {
             
             drawAbilityIcon(g2d, ability, abilityX, abilityY);
         }
-    }
+    }    
     
     private void drawAbilityIcon(Graphics2D g2d, Ability ability, int centerX, int centerY) {
         int iconSize = 45;
@@ -270,57 +285,42 @@ public class AbilityManager {
         int y = centerY - iconSize / 2;
         
         // Background circle
-        Color bgColor;
-        if (!ability.unlocked) {
-            bgColor = new Color(40, 40, 40, 180);
-        } else if (ability.active) {
-            bgColor = new Color(
-                ability.color.getRed(), 
-                ability.color.getGreen(), 
-                ability.color.getBlue(), 
-                200
-            );
-        } else if (ability.onCooldown) {
-            bgColor = new Color(60, 60, 70, 200);
-        } else {
-            bgColor = new Color(50, 60, 80, 200);
-        }
-        
+        Color bgColor = ability.unlocked ? new Color(50, 60, 80, 200) : new Color(40, 40, 40, 180);
         g2d.setColor(bgColor);
         g2d.fillOval(x, y, iconSize, iconSize);
         
-        // Cooldown overlay (arc)
+        // Cooldown overlay
         if (ability.onCooldown) {
             float percent = ability.getCooldownPercent();
             int arcAngle = (int)(360 * percent);
             
-            g2d.setColor(new Color(30, 30, 40, 180));
+            g2d.setColor(new Color(0, 0, 0, 180));
             g2d.fillArc(x, y, iconSize, iconSize, 90, -arcAngle);
         }
         
-        // Active glow
+        // Ready flash effect
+        int flashAlpha = (int)(255 * (ability.flashTimer / 30));
+        if (ability.drawFlash) {
+        	g2d.setColor(new Color(255, 255, 255, flashAlpha));
+            g2d.fillOval(x - 3, y - 3, iconSize + 6, iconSize + 6);
+        }
+        
+        // Active state - simple bright outline
         if (ability.active && ability.unlocked) {
-            int glowSize = iconSize + 8;
-            int glowAlpha = (int)(100 + 80 * Math.sin(System.currentTimeMillis() / 200.0));
-            g2d.setColor(new Color(
-                ability.color.getRed(),
-                ability.color.getGreen(),
-                ability.color.getBlue(),
-                glowAlpha
-            ));
+            g2d.setColor(ability.color);
             g2d.setStroke(new BasicStroke(3));
-            g2d.drawOval(x - 4, y - 4, glowSize, glowSize);
+            g2d.drawOval(x, y, iconSize, iconSize);
         }
         
         // Border
         Color borderColor = ability.unlocked ? ability.color : new Color(80, 80, 80);
         g2d.setColor(borderColor);
-        g2d.setStroke(new BasicStroke(ability.active ? 3 : 2));
+        g2d.setStroke(new BasicStroke(2));
         g2d.drawOval(x, y, iconSize, iconSize);
         g2d.setStroke(new BasicStroke(1));
         
         // Key letter
-        g2d.setFont(new Font("Serif", Font.BOLD, 18));
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
         FontMetrics fm = g2d.getFontMetrics();
         Color textColor = ability.unlocked ? Color.WHITE : new Color(100, 100, 100);
         g2d.setColor(textColor);
@@ -330,22 +330,22 @@ public class AbilityManager {
             centerY + fm.getAscent() / 2 - 2
         );
         
-        // Cooldown timer
+        // Cooldown number
         if (ability.onCooldown) {
-            g2d.setFont(new Font("Monospaced", Font.BOLD, 9));
-            String timeText = String.format("%.1fs", ability.cooldownTimer / 60.0);
+            g2d.setFont(new Font("Arial", Font.BOLD, 10));
+            String timeText = String.format("%.1f", ability.cooldownTimer / 60.0);
             fm = g2d.getFontMetrics();
-            g2d.setColor(new Color(255, 150, 150));
+            g2d.setColor(new Color(255, 255, 255, 200));
             g2d.drawString(
                 timeText,
                 centerX - fm.stringWidth(timeText) / 2,
-                centerY + 16
+                centerY + 18
             );
         }
         
-        // "LOCKED" text if not unlocked
+        // "LOCKED" text
         if (!ability.unlocked) {
-            g2d.setFont(new Font("Serif", Font.BOLD, 8));
+            g2d.setFont(new Font("Arial", Font.PLAIN, 7));
             fm = g2d.getFontMetrics();
             g2d.setColor(new Color(150, 50, 50));
             String lockText = "LOCKED";
@@ -397,7 +397,6 @@ public class AbilityManager {
         if (pos == null) return;
         
         // Drone body
-        int droneSize = 12;
         g2d.setColor(new Color(100, 200, 255));
         int[] xs = {pos.x, pos.x - droneSize/2, pos.x, pos.x + droneSize/2};
         int[] ys = {pos.y - droneSize/2, pos.y + droneSize/2, pos.y + droneSize/4, pos.y + droneSize/2};
@@ -405,7 +404,7 @@ public class AbilityManager {
         
         // Health indicator
         for (int i = 0; i < droneHealth; i++) {
-            g2d.setColor(new Color(0, 255, 0));
+            g2d.setColor(new Color(102, 146, 61));
             g2d.fillRect(pos.x - 12 + i * 8, pos.y - 20, 6, 3);
         }
     }
@@ -417,15 +416,16 @@ public class AbilityManager {
             int pulseRadius = (int)(30 + 20 * Math.sin(chargePercent * Math.PI * 4));
             int alpha = (int)(200 * chargePercent);
             
-            g2d.setColor(new Color(255, 0, 255, alpha));
+            g2d.setColor(new Color(255, 255, 255, alpha));
             g2d.setStroke(new BasicStroke(5));
             g2d.drawOval((int)shipX - pulseRadius, (int)shipY - pulseRadius, 
                         pulseRadius * 2, pulseRadius * 2);
             g2d.setStroke(new BasicStroke(1));
             
             // "CHARGING" text
+            alpha = (int) (200 * (pulseRadius / 50.0));
             g2d.setFont(new Font("Serif", Font.BOLD, 30));
-            g2d.setColor(new Color(255, 100, 255));
+            g2d.setColor(new Color(255, 255, 255, alpha));
             String text = "CHARGING...";
             FontMetrics fm = g2d.getFontMetrics();
             g2d.drawString(text, screenWidth/2 - fm.stringWidth(text)/2, 100);
@@ -439,18 +439,18 @@ public class AbilityManager {
             for (int i = 0; i < 5; i++) {
                 int r = (int)(novaExplosionRadius - i * 50);
                 if (r > 0) {
-                    g2d.setColor(new Color(255, 100, 255, alpha / (i + 1)));
+                    g2d.setColor(new Color(255, 255, 255, alpha / (i + 1)));
                     g2d.setStroke(new BasicStroke(8 - i));
                     g2d.drawOval((int)shipX - r, (int)shipY - r, r * 2, r * 2);
                 }
             }
             
             // Screen flash
-            g2d.setColor(new Color(255, 200, 255, alpha));
+            g2d.setColor(new Color(255, 255, 255, alpha));
             g2d.fillRect(0, 0, screenWidth, screenHeight);
             
             // "NOVA BLAST" text
-            if (novaExplosionTimer < 30) {
+            if (novaExplosionTimer <= 60) {
                 g2d.setFont(new Font("Serif", Font.BOLD, 80));
                 g2d.setColor(new Color(255, 255, 255, alpha));
                 String text = "NOVA BLAST";

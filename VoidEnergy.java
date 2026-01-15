@@ -20,19 +20,18 @@ public class VoidEnergy {
         if (active) {
             // Passive absorption
             energy += absorptionRate * actionMultiplier;
-            if (energy > maxEnergy) {
-                energy = maxEnergy;
+            if (energy > maxEnergy) { energy = maxEnergy;  }
+            // Reset multiplier when no action
+            if (actionMultiplier > 1.0) {
+                actionMultiplier -= 0.02;
+                if (actionMultiplier < 1.0) actionMultiplier = 1.0;
             }
         } else if (energy > 0) {
             // Slowly dissipate when not in void world
             energy -= 0.05;
             if (energy < 0) energy = 0;
-            
-            // Slowly reset action multiplier when not active
-            if (actionMultiplier > 1.0) {
-                actionMultiplier -= 0.02;
-                if (actionMultiplier < 1.0) actionMultiplier = 1.0;
-            }
+            // Reset Multiplier
+            actionMultiplier = 1.0;
         }
     }
     

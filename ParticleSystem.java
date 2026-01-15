@@ -70,10 +70,10 @@ public class ParticleSystem {
             case MEDIUM -> 20;
             case SMALL -> 10;
         };
-        createExplosion(x, y, new Color(180, 180, 180, 255), count, 3.0);
+        createExplosion(x, y, new Color(115, 135, 135), count, 3.0);
     }
     
-    public void createVoidExplosion(double x, double y, Asteroid.Size size) {
+    public void createLaserExplosion(double x, double y, Asteroid.Size size) {
         int count = switch (size) {
             case LARGE -> 40;
             case MEDIUM -> 25;
@@ -82,10 +82,41 @@ public class ParticleSystem {
         createExplosion(x, y, new Color(180, 0, 255, 255), count, 4.0);
     }
     
+    public void createBulletExplosion(double x, double y) {
+    	createExplosion(x, y, Color.YELLOW, 50, 5.0);
+        createExplosion(x, y, new Color(255, 255, 255, 255), 40, 3.0);
+    }
+    
+    public void createVoidExplosion(double x, double y) {
+    	createExplosion(x, y, new Color(100, 50, 200, 180), 50, 5.0);
+        createExplosion(x, y, new Color(55, 0, 155, 255), 40, 3.0);
+    }
+    
+    public void createDroneExplosion(double x, double y) {
+    	// Multiple layers of explosion
+        createExplosion(x, y, new Color(100, 200, 255, 255), 50, 5.0);
+        createExplosion(x, y, new Color(255, 200, 0, 255), 40, 3.0);
+        createExplosion(x, y, new Color(255, 255, 255, 255), 30, 2.0);
+    }
+    
     public void createShipExplosion(double x, double y) {
         // Multiple layers of explosion
         createExplosion(x, y, new Color(255, 100, 0, 255), 50, 5.0);
         createExplosion(x, y, new Color(255, 200, 0, 255), 40, 3.0);
+        createExplosion(x, y, new Color(255, 255, 255, 255), 30, 2.0);
+    }
+    
+    public void createBlackHoleExplosion(double x, double y) {
+        // Multiple layers of explosion
+        createExplosion(x, y, new Color(150, 200, 255, 180), 80, 8.0);
+        createExplosion(x, y, new Color(100, 50, 200, 255), 50, 5.0);
+        createExplosion(x, y, new Color(255, 255, 255, 255), 30, 2.0);
+    }
+    
+    public void createCosmicEntityExplosion(double x, double y) {
+        // Multiple layers of explosion
+        createExplosion(x, y, new Color(55, 0, 155, 180), 65, 5.0);
+        createExplosion(x, y, new Color(100, 50, 200, 255), 40, 3.0);
         createExplosion(x, y, new Color(255, 255, 255, 255), 30, 2.0);
     }
     

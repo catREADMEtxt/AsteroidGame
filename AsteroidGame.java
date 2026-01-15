@@ -17,6 +17,9 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private List<Asteroid> asteroidsToRemove;
 	private List<VoidLaser> lasersToRemove;
 	private List<Bullet> bulletsToRemove;
+	private List<VoidHazard> voidHazardsToRemove;
+	private List<BlackHole> blackHolesToRemove;
+	private List<CosmicEntity> cosmicEntitiesToRemove;
 	
     // Leveling, Alpha Fades, and Timers
     private int level;
@@ -53,10 +56,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private int menuBackgroundShift = 0;
 	// Death screen animation fields
 	private int deathExplosionFrame;
-	private boolean deathExplosionDone = false;
-	// UI Buttons
-    private JButton backToMenuBtn;
-    
+	private boolean deathExplosionDone = false;    
     
 	// ====== Ship ======
 	// ------ Thrust ------
@@ -96,11 +96,16 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     private String gameState = "menu"; // "menu", "playing", "paused", "death"
 	private int hoveredButton;
 	private boolean showingInstructions;
+	private int instructionPage = 0;
+	private final int totalInstructionPages = 3;
 	private FloatingTextManager floatingTextManager;
 	// Deaths
 	private boolean voidDeath;
 	private boolean bulletDeath;
     private boolean asteroidDeath;
+	private boolean voidHazardDeath;
+	private boolean blackHoleDeath;
+	private boolean cosmicEntityDeath;
     // Save system
     private final File saveFile = new File("save.dat");
     private final File leaderBoardDataFile = new File("leaderBoardData.dat");
@@ -152,7 +157,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		ship = new Ship();
 		shipLevel = new ShipLevel();
 		teleportAnchor = new TeleportAnchor();
-		abilityManager = new AbilityManager(ship);
+		abilityManager = new AbilityManager();
 		floatingTextManager = new FloatingTextManager();
 		voidHazards.clear();
 		blackHoles.clear();
@@ -192,13 +197,19 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					my >= HEIGHT/2 + 50 && my <= HEIGHT/2 + 90) {
 					resumeGame();
 				}
-				
+
 				// Instructions button bounds
 				if (mx >= WIDTH/2 - 100 && mx <= WIDTH/2 + 100 &&
 					my >= HEIGHT/2 + 120 && my <= HEIGHT/2 + 160) {
-					showingInstructions = !showingInstructions;
+					if (showingInstructions) {
+						showingInstructions = false;
+						instructionPage = 0; // Reset to first page
+					} else {
+						showingInstructions = true;
+					}
 				}
 			}
+			
 		});
 		
 		addMouseMotionListener(new MouseMotionAdapter() {
@@ -295,81 +306,240 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		int panelHeight = 550;
 		int panelX = WIDTH / 2 - panelWidth / 2;
 		int panelY = HEIGHT / 2 - panelHeight / 2;
+		int padding = 15;
 		
-		// Panel background with border
-		g2.setColor(new Color(20, 25, 40, 240));
-		g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 20, 20);
+		// Panel background
+		g2.setColor(new Color(20, 25, 40, 250));
+		g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
 		
-		// Animated border
-		float borderPulse = 0.7f + 0.3f * (float)Math.sin(System.currentTimeMillis() / 300.0);
-		g2.setColor(new Color(100, 150, 255, (int)(255 * borderPulse)));
-		g2.setStroke(new BasicStroke(3));
-		g2.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 20, 20);
+		// Border
+		g2.setColor(new Color(100, 150, 255, 200));
+		g2.setStroke(new BasicStroke(2));
+		g2.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
 		g2.setStroke(new BasicStroke(1));
 		
-		// Title
-		g2.setFont(new Font("Serif", Font.BOLD, 32));
+		// Page Title
+		g2.setFont(new Font("Arial", Font.BOLD, 28));
 		g2.setColor(new Color(150, 200, 255));
-		String title = "HOW TO PLAY";
+		String title;
+		switch (instructionPage) {
+			case 0 -> title = "QUICK START";
+			case 1 -> title = "GAME MECHANICS";
+			case 2 -> title = "ADVANCED TIPS";
+			default -> title = "Unknown";
+		}
 		FontMetrics titleFm = g2.getFontMetrics();
-		g2.drawString(title, panelX + panelWidth/2 - titleFm.stringWidth(title)/2, panelY + 50);
+		g2.drawString(title, panelX + panelWidth/2 - titleFm.stringWidth(title)/2, panelY + padding + titleFm.getAscent());
+		
+		// Page Indicator
+		g2.setFont(new Font("Arial", Font.PLAIN, 14));
+		String pageNum = (instructionPage + 1) + " / " + totalInstructionPages;
+		FontMetrics pageFm = g2.getFontMetrics();
+		g2.setColor(new Color(150, 150, 180));
+		g2.drawString(pageNum, panelX + panelWidth - padding - pageFm.stringWidth(pageNum), panelY + padding + titleFm.getAscent());
 		
 		// Separator
-		g2.setColor(new Color(100, 150, 255));
-		g2.drawLine(panelX + 50, panelY + 70, panelX + panelWidth - 50, panelY + 70);
+		g2.setColor(new Color(100, 150, 255, 100));
+		g2.drawLine(panelX + 50, panelY + 60, panelX + panelWidth - 50, panelY + 60);
 		
-		// Instructions content
-		g2.setFont(new Font("Monospaced", Font.PLAIN, 15));
-		FontMetrics fm = g2.getFontMetrics();
-		int textY = panelY + 105;
-		int lineHeight = 28;
+		// Content based on page
+		int lineHeight = 25;
+		switch (instructionPage) {
+			case 0 -> drawQuickStartPage(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
+			case 1 -> drawMechanicsPage(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
+			case 2 -> drawAdvancedPage(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
+		}
 		
-		String[][] instructions = {
-			{"MOVEMENT", ""},
+		// Navigation arrows
+		g2.setFont(new Font("Arial", Font.BOLD, 20));
+		g2.setColor(new Color(150, 200, 255));
+		
+		// Left arrow
+		if (instructionPage > 0) {
+			String leftArrow = "◄ PREV";
+			g2.drawString(leftArrow, panelX + padding, panelY + panelHeight - padding);
+		}
+		
+		// Right arrow
+		if (instructionPage < totalInstructionPages - 1) {
+			String rightArrow = "NEXT ►";
+			FontMetrics arrowFm = g2.getFontMetrics();
+			g2.drawString(rightArrow, panelX + panelWidth - arrowFm.stringWidth(rightArrow) - padding, 
+						panelY + panelHeight - padding);
+		}
+		
+		// Close hint
+		g2.setFont(new Font("Arial", Font.PLAIN, 12));
+		g2.setColor(new Color(150, 150, 180));
+		String closeHint = "Press [I] to close • Use Arrow Keys to navigate";
+		int hintWidth = g2.getFontMetrics().stringWidth(closeHint);
+		g2.drawString(closeHint, panelX + panelWidth/2 - hintWidth/2, panelY + panelHeight - padding);
+	}
+
+	private void drawQuickStartPage(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
+		int textY = panelY + 85;
+		int textX = panelX + 80;
+		
+		// Movement Instructions
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("MOVEMENT:", textX, textY);
+		textY += lineHeight;
+		
+		String[][] movementControlDisplay = {
 			{"↑", "Thrust Forward"},
 			{"← →", "Rotate Ship"},
-			{"SPACE", "Hyper Mode (Faster Movement)"},
-			{"", ""},
-			{"COMBAT", ""},
-			{"S", "Fire Weapon (Bullet or Void Laser)"},
-			{"", ""},
-			{"ABILITIES", ""},
-			{"D", "Toggle Void Dimension"},
-			{"F", "Fade (Invulnerability)"},
-			{"T", "Teleport Anchor (Place/Return)"},
-			{"", ""},
-			{"SYSTEM", ""},
-			{"ESC", "Pause Game"}
+			{"SPACE", "Hyper Mode (Fast Movement & Rotation)"},
+			{"S", "Fire Weapon"}
 		};
 		
-		for (String[] line : instructions) {
-			if (line[0].isEmpty()) {
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));		
+		g2.setColor(new Color(220, 220, 240));
+		for (String[] line : movementControlDisplay) {
+			g2.setColor(new Color(100, 255, 150));
+			g2.drawString(line[0], textX, textY);
+			g2.setColor(new Color(200, 200, 240));
+			g2.drawString(line[1], textX + 100, textY);
+			textY += lineHeight;
+		}
+		
+		// Objective Display
+		String[][] shortcutDisplay = {
+			{"I", "Show/Hide instructions page"},
+			{"ENTER", "(menu) start a new game; (death) return to menu"},
+			{"ESC", "Pause and Save Game"}
+		};
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("SHORTCUTS:", textX, textY);
+		textY += lineHeight;
+		
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));		
+		g2.setColor(new Color(220, 220, 240));
+		for (String[] line : shortcutDisplay) {
+			g2.setColor(new Color(100, 255, 150));
+			g2.drawString(line[0], textX, textY);
+			g2.setColor(new Color(200, 200, 240));
+			g2.drawString(line[1], textX + 100, textY);
+			textY += lineHeight;
+		}
+		
+		// Basic Ability Description
+		String[][] basicAbilityDescription = {
+			{"D", "Enter/Exit the Void, avoid Asteroid collision, no Void Hazard collision outside of the Void"},
+			{"F", "Fade and become invulnerable, no collision, can't use weapon, only lasts 5 sec"},
+			{"T", "Leaves an anchor, press again to teleport to the anchor"},
+			{"Q", "Destroys surrounding asteroids, temporary invulnerability"},
+			{"R", "Slows everything for a period except for ship and weapon"},
+			{"E", "Deploy drone that auto-fires at closest asteroid"},
+			{"X", "clears the entire screen after a short charging period"}
+		};
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("ABILITIES (basic description):", textX, textY);
+		textY += lineHeight;
+		
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));		
+		g2.setColor(new Color(220, 220, 240));
+		for (String[] line : basicAbilityDescription) {
+			g2.setColor(new Color(100, 255, 150));
+			g2.drawString(line[0], textX, textY);
+			g2.setColor(new Color(200, 200, 240));
+			g2.drawString(line[1], textX + 100, textY);
+			textY += lineHeight;
+		}
+	}
+
+	private void drawMechanicsPage(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
+		g2.setFont(new Font("Arial", Font.PLAIN, 14));
+		int textY = panelY + 100;
+		
+		String[] mechanics = {
+			"VOID DIMENSION (D) - Unlocks at Level 3",
+			"  • Enter a parallel dimension where asteroids are ghostly",
+			"  • Absorb void energy while inside",
+			"  • If void energy reaches 100, you DIE instantly",
+			"  • Void hazards spawn inside - they're harmless outside",
+			"",
+			"FADE MODE (F) - Unlocks at Level 5",
+			"  • Become invulnerable for 5 seconds",
+			"  • Drains void energy faster than normal",
+			"  • Cannot fire weapons while faded",
+			"",
+			"TELEPORT (T) - Unlocks at Level 7",
+			"  • Press once to place an anchor",
+			"  • Press again to teleport back to anchor",
+			"  • Anchor expires after 10 seconds"
+		};
+		
+		for (String line : mechanics) {
+			if (line.isEmpty()) {
 				textY += lineHeight / 2;
 				continue;
 			}
 			
-			if (line[1].isEmpty()) {
-				// Section header
-				g2.setFont(new Font("Serif", Font.BOLD, 18));
+			if (line.contains("Unlocks")) {
 				g2.setColor(new Color(255, 200, 100));
-				g2.drawString(line[0], panelX + 60, textY);
-				g2.setFont(new Font("Monospaced", Font.PLAIN, 15));
+				g2.setFont(new Font("Arial", Font.BOLD, 14));
+			} else if (line.startsWith("  ")) {
+				g2.setColor(new Color(200, 200, 220));
+				g2.setFont(new Font("Arial", Font.PLAIN, 13));
 			} else {
-				// Key + description
-				g2.setColor(new Color(100, 255, 150));
-				g2.drawString(line[0], panelX + 80, textY);
 				g2.setColor(new Color(220, 220, 240));
-				g2.drawString(line[1], panelX + 200, textY);
+				g2.setFont(new Font("Arial", Font.PLAIN, 14));
 			}
+			
+			g2.drawString(line, panelX + 60, textY);
 			textY += lineHeight;
 		}
+	}
+
+	private void drawAdvancedPage(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
+		g2.setFont(new Font("Arial", Font.PLAIN, 14));
+		int textY = panelY + 100;
 		
-		// Close button hint
-		g2.setFont(new Font("Serif", Font.ITALIC, 16));
-		g2.setColor(new Color(150, 150, 180));
-		String closeHint = "Click [I] again to close";
-		int hintWidth = g2.getFontMetrics().stringWidth(closeHint);
-		g2.drawString(closeHint, panelX + panelWidth/2 - hintWidth/2, panelY + panelHeight - 25);
+		String[] advanced = {
+			"ADVANCED ABILITIES",
+			"",
+			"SHIELD BURST (Q) - Level 9",
+			"  • Destroys all nearby asteroids in expanding wave",
+			"  • Grants temporary invulnerability",
+			"",
+			"TIME SLOW (R) - Level 12",
+			"  • Slows everything except your ship to 30% speed",
+			"  • Duration: 5 seconds",
+			"",
+			"COMBAT DRONE (E) - Level 15",
+			"  • Deploys auto-firing companion that orbits ship",
+			"  • Automatically targets nearest asteroid",
+			"  • Has 3 HP - destroyed if hit 3 times",
+			"",
+			"NOVA BLAST (X) - Level 20 ULTIMATE",
+			"  • Requires 75+ void energy to activate",
+			"  • Clears entire screen after 1 second charge",
+			"  • Consumes all void energy"
+		};
+		
+		for (String line : advanced) {
+			if (line.isEmpty()) {
+				textY += lineHeight / 2;
+				continue;
+			}
+			
+			if (line.contains("Level") || line.equals("ADVANCED ABILITIES")) {
+				g2.setColor(new Color(255, 200, 100));
+				g2.setFont(new Font("Arial", Font.BOLD, 14));
+			} else if (line.startsWith("  ")) {
+				g2.setColor(new Color(200, 200, 220));
+				g2.setFont(new Font("Arial", Font.PLAIN, 13));
+			} else {
+				g2.setColor(new Color(220, 220, 240));
+				g2.setFont(new Font("Arial", Font.PLAIN, 14));
+			}
+			
+			g2.drawString(line, panelX + 60, textY);
+			textY += lineHeight;
+		}
 	}
 
     void resumeGame() {
@@ -420,39 +590,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
             e.printStackTrace();
         }
     }
-    void setupPauseMenu() {
-	    setLayout(null);
-	
-	    backToMenuBtn = new JButton("Menu");
-	    backToMenuBtn.setBackground(Color.DARK_GRAY);
-	    backToMenuBtn.setForeground(Color.WHITE);
-	    backToMenuBtn.setFont(new Font("Times New Roman", Font.PLAIN, 25));
-	    backToMenuBtn.setBounds(WIDTH / 2 - 75, HEIGHT / 2 + 100, 150, 30);
-	    backToMenuBtn.setToolTipText("Press to return to Menu");
-	
-	    backToMenuBtn.addActionListener(e -> {
-	        gameState = "menu";
-	        remove(backToMenuBtn);  // clean up
-	        setupMenu();
-	        revalidate();
-	        repaint();
-	    });
-	
-	    backToMenuBtn.addMouseListener(new MouseAdapter() {
-            @Override
-	        public void mouseEntered(MouseEvent e) {
-	            backToMenuBtn.setBackground(Color.LIGHT_GRAY);
-	            backToMenuBtn.setForeground(Color.DARK_GRAY);
-	        }
-			@Override
-	        public void mouseExited(MouseEvent e) {
-	            backToMenuBtn.setBackground(Color.DARK_GRAY);
-	            backToMenuBtn.setForeground(Color.LIGHT_GRAY);
-	        }
-	    });
-	
-	    add(backToMenuBtn);
-	}
 
     private void startDeathSequence() {
 	    // check for highest score & duration
@@ -536,7 +673,11 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				abilityManager.setVoidUnlocked(shipLevel.isAbilityUnlocked("void"));
 				abilityManager.setFadeUnlocked(shipLevel.isAbilityUnlocked("fade"));
 				abilityManager.setTeleportUnlocked(shipLevel.isAbilityUnlocked("teleport"));
-
+				abilityManager.setShieldUnlocked(shipLevel.isAbilityUnlocked("shield"));
+				abilityManager.setTimeSlowUnlocked(shipLevel.isAbilityUnlocked("timeslow"));
+				abilityManager.setDroneUnlocked(shipLevel.isAbilityUnlocked("drone"));
+				abilityManager.setNovaUnlocked(shipLevel.isAbilityUnlocked("nova"));
+				
 				abilityManager.setVoidActive(ship.getVoidEnergy().isActive());
 				abilityManager.setFadeActive(fadeActive);
 				abilityManager.setTeleportActive(teleportAnchor.isAnchorPlaced());
@@ -569,6 +710,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						vhIt.remove();
 					} else if (!fadeActive && vh.intersects(ship.getBounds()) && ship.getVoidEnergy().isActive()) {
 						abilityManager.setVoidActive(false);
+						voidHazardDeath = true;
 						startDeathSequence();
 						return;
 					}
@@ -585,7 +727,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					
 					// Check if consumed
 					if (!fadeActive && bh.isShipConsumed(ship.getX(), ship.getY())) {
-						asteroidDeath = true;
+						blackHoleDeath = true;
 						startDeathSequence();
 						return;
 					}
@@ -596,7 +738,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					ce.update(ship.getX(), ship.getY());
 					
 					if (!fadeActive && !ship.getVoidEnergy().isActive() && ce.isNearShip(ship.getBounds())) {
-						asteroidDeath = true;
+						cosmicEntityDeath = true;
 						startDeathSequence();
 						return;
 					}
@@ -627,6 +769,34 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                         levelStarting = false;
                         level++;
                         levelStartCountdown = 3 * 60;
+                        // Generate more asteroids than before
+                        for (int i = 0; i < level + 2; i++) {
+                            Asteroid newAsteroid = Asteroid.randomAsteroid(WIDTH, HEIGHT);
+							if (level > 3 && level < 10) { newAsteroid.setMultiplier(level * 0.5); }
+							asteroids.add(newAsteroid);
+                        }
+
+						// Introduce First Black Holes at level 5
+						if (level == 1) {
+    						blackHoles.add(new BlackHole(WIDTH * 0.3, HEIGHT * 0.5));
+						}
+
+						// Introduce First Cosmic Entity at level 10
+						if (level == 1) {
+    						cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
+						}
+                        
+						// Multiple Threats at level 10+
+						if (level >= 10) {
+							if (level % 3 == 0) {
+								double bx = rand.nextDouble() * WIDTH;
+								double by = rand.nextDouble() * HEIGHT;
+								blackHoles.add(new BlackHole(bx, by));
+							}
+							if (level % 4 == 0) {
+								cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
+							}
+						}
                     }
                     levelDisplayAlpha = (int) (255 * ((float)levelStartCountdown / 180));
                     if (levelDisplayAlpha <= 0) {
@@ -643,35 +813,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                         levelTimer--;
                     } else {
                         levelTimer = 30 * 60;  // reset 30 second countdown for next level
-                        
-                        // Generate more asteroids than before
-                        for (int i = 0; i < level + 2; i++) {
-                            asteroids.add(Asteroid.randomAsteroid(WIDTH, HEIGHT));
-                            if (level > 3 && level < 10) { asteroids.get(0).setMultiplier(level * 0.5); }
-                        }
-
-						// Introduce First Black Holes at level 5
-						if (level == 5) {
-    						blackHoles.add(new BlackHole(WIDTH * 0.3, HEIGHT * 0.5));
-						}
-
-						// Introduce First Cosmic Entities at level 10
-						if (level == 8) {
-    						cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
-						}
-                        
-						// Multiple Threats at level 10+
-						if (level >= 10) {
-							if (level % 3 == 0) {
-								double bx = rand.nextDouble() * WIDTH;
-								double by = rand.nextDouble() * HEIGHT;
-								blackHoles.add(new BlackHole(bx, by));
-							}
-							if (level % 4 == 0) {
-								cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
-							}
-						}
-
                         // Show level text for 3 seconds (180 frames)
                         levelStarting = true;
                     }
@@ -682,36 +823,197 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 if (rotatingRight) ship.rotateRight();
                 ship.updatePhysics();
                 
-				// Bullet, Laser, Asteroid Collision, Addition, and Removal
-                // Asteroid Collision with Ship
-				for (Asteroid a : asteroids) {
-                    a.update();
-                    
-                    if (!fadeActive && !ship.getVoidEnergy().isActive() && a.intersects(ship.getBounds())) {
-                        asteroidDeath = true;
-                        startDeathSequence();
-                        return;
-                    }
-                }
+				// ====== Ability Effects ======
+                // Asteroid Collision with Ship & Time Slow effect
 				
-				// ====== Collisions ======
+				if (abilityManager.isTimeSlowActive())
+					for (Asteroid a : asteroids) {
+						a.setSlowedVelocity(abilityManager.getTimeScale());
+						a.toggleTimeSlow(abilityManager.isTimeSlowActive());
+					}
+				
+				// Shield destroys asteroids
+				if (abilityManager.isShieldActive()) {
+					Iterator<Asteroid> shieldIt = asteroids.iterator();
+					while (shieldIt.hasNext()) {
+						Asteroid a = shieldIt.next();
+						double dx = a.getBounds().getBounds().getCenterX() - ship.getX();
+						double dy = a.getBounds().getBounds().getCenterY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						
+						if (dist < abilityManager.getShieldRadius()) {
+							// Destroy asteroid
+							particleSystem.createAsteroidExplosion(
+								a.getBounds().getBounds().getCenterX(),
+								a.getBounds().getBounds().getCenterY(),
+								a.getSize()
+							);
+							
+							// Award points
+							switch (a.getSize()) {
+								case LARGE -> { scoreGain = 20; xpGain = 10; fuelGain = 20; }
+								case MEDIUM -> { scoreGain = 10; xpGain = 5; fuelGain = 10; }
+								case SMALL -> { scoreGain = 5; xpGain = 3; fuelGain = 5; }
+							}
+							score += scoreGain;
+							shipLevel.addXP(xpGain);
+							ship.addFuel(fuelGain);
+							
+							shieldIt.remove();
+							if (a.getSize() != Asteroid.Size.SMALL) {
+								newAsteroids.addAll(a.split());
+							}
+						}
+					}
+				}
+
+				// Drone auto-fire
+				if (abilityManager.isDroneDeployed() && abilityManager.canDroneFire()) {
+					Point dronePos = abilityManager.getDronePosition(ship.getX(), ship.getY());
+					if (dronePos != null) {
+						// Find nearest asteroid within 200 pixels
+						Asteroid nearest = null;
+						double nearestDist = 200;
+						
+						for (Asteroid a : asteroids) {
+							double dx = a.getBounds().getBounds().getCenterX() - dronePos.x;
+							double dy = a.getBounds().getBounds().getCenterY() - dronePos.y;
+							double dist = Math.sqrt(dx * dx + dy * dy);
+							
+							if (dist < nearestDist) {
+								nearest = a;
+								nearestDist = dist;
+							}
+						}
+						
+						if (nearest != null) {
+							// Calculate angle to target
+							double dx = nearest.getBounds().getBounds().getCenterX() - dronePos.x;
+							double dy = nearest.getBounds().getBounds().getCenterY() - dronePos.y;
+							double angleToTarget = Math.atan2(dx, -dy);
+							
+							// Fire bullet from drone
+							bullets.add(new Bullet(dronePos.x + 30, dronePos.y + 30, angleToTarget));
+							abilityManager.droneDidFire();
+						}
+					}
+				}
+
+				// ====== Collisions & Physics ======
 				asteroidsToRemove = new ArrayList<>();
                 newAsteroids = new ArrayList<>();
+                lasersToRemove = new ArrayList<>(); 
+                bulletsToRemove = new ArrayList<>();
+                voidHazardsToRemove = new ArrayList<>();
+                blackHolesToRemove = new ArrayList<>();
+                cosmicEntitiesToRemove = new ArrayList<>();
+				// ------ Asteroid Physics & Collision with Ship ------
+				for (Asteroid asteroid : asteroids) {
+					asteroid.update();
+					if (!fadeActive && !ship.getVoidEnergy().isActive() && asteroid.intersects(ship.getBounds())) {
+						asteroidDeath = true;
+						startDeathSequence();
+						return;
+					}
+					// Drone hit by Asteroid
+					Polygon droneBounds = abilityManager.getDroneBounds(ship.getX(), ship.getY());
+	                if (abilityManager.isDroneDeployed() 
+	                	&& asteroid.intersects(droneBounds)) {
+	                	abilityManager.damageDrone();
+	                	
+	                	asteroidsToRemove.add(asteroid);
+	                	
+	                	// Add particle effect
+                        particleSystem.createAsteroidExplosion(
+                        	asteroid.getBounds().getBounds().getCenterX(),
+                            asteroid.getBounds().getBounds().getCenterY(),
+                            asteroid.getSize()
+                        );
+                        particleSystem.createDroneExplosion(
+	                		droneBounds.getBounds().getCenterX(),
+	                		droneBounds.getBounds().getCenterY()
+	                	);
+	                	/*
+	                	// Handle asteroid destruction
+						if (asteroid.getSize() == Asteroid.Size.SMALL) {
+							asteroidsToRemove.add(asteroid);
+						} else {
+							asteroidsToRemove.add(asteroid);
+							newAsteroids.addAll(asteroid.split());
+						}
+						*/
+						
+						switch (asteroid.getSize()) {
+							case LARGE -> {
+								xpGain = 10;
+								fuelGain = 20;
+								scoreGain = 20;
+								largeDestroyed++;
+							}
+							case MEDIUM -> {
+								xpGain = 5;
+								fuelGain = 10;
+								scoreGain = 10;
+								mediumDestroyed++;
+							}
+							case SMALL -> {
+								xpGain = 3;
+								fuelGain = 5;
+								scoreGain = 5;
+								smallDestroyed++;
+							}
+						}
+						// Track old level
+						int oldLevel = shipLevel.getLevel();
+							
+						// Award rewards
+						score += scoreGain;
+						shipLevel.addXP(xpGain);
+						ship.addFuel(fuelGain);
+						
+						// Show floating text at collision point
+						Rectangle asteroidBounds = asteroid.getBounds().getBounds();
+						double centerX = asteroidBounds.getCenterX();
+						double centerY = asteroidBounds.getCenterY();
+						
+						floatingTextManager.add(FloatingTextManager.createFuel(fuelGain, centerX, centerY + 15));
+						
+						// Show XP gain near ship
+						floatingTextManager.add(FloatingTextManager.createXP(xpGain, ship.getX() + 30, ship.getY() - 20));
+								
+
+						// Check for level up
+						if (shipLevel.getLevel() > oldLevel) {
+							showingLevelUp = true;
+							levelUpFrame = 0;
+							
+							// Create level up particle effect
+							particleSystem.createExplosion(
+								ship.getX(), ship.getY(),
+								shipLevel.getLevelColor(),
+								100, 8.0
+							);
+						}
+	                }
+				}
 				
                 // ------ Void Laser Collisions ------
-                List<VoidLaser> lasersToRemove = new ArrayList<>();  	 
-                
                 for (VoidLaser laser : voidLasers) {
                     if (!laser.isAlive()) {
                         lasersToRemove.add(laser);
                         continue;
                     }
+                    // Drone hit by laser
+	                if (abilityManager.isDroneDeployed() 
+	                	&& laser.intersects(abilityManager.getDroneBounds(ship.getX(), ship.getY()))) {
+	                	abilityManager.damageDrone();
+	                }
                     
 					if (!ship.getVoidEnergy().isActive()) {
 						for (Asteroid asteroid : asteroids) {
 							if (laser.intersects(asteroid.getBounds())) {
 								// Add particle effect
-								particleSystem.createVoidExplosion(
+								particleSystem.createLaserExplosion(
 										asteroid.getBounds().getBounds().getCenterX(),
 										asteroid.getBounds().getBounds().getCenterY(),
 										asteroid.getSize()
@@ -784,11 +1086,23 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 voidLasers.removeAll(lasersToRemove);
                 
                 // ------ Bullet Collision ------
-				bulletsToRemove = new ArrayList<>();
-                
 				// Update bullets and check for bullet collisions
                 for (Bullet bullet : bullets) {
                     bullet.update(WIDTH, HEIGHT);
+                    // Ship hit by bullet
+	                if (!fadeActive && !ship.getVoidEnergy().isActive() 
+	                	&& bullet.getBounds().intersects(ship.getBounds().getBounds2D())) {
+	                    bulletDeath = true;
+	                    startDeathSequence();
+	                    return;
+	                }
+	                
+	                // Drone hit by bullet
+	                if (abilityManager.isDroneDeployed() 
+	                	&& bullet.getBounds().intersects(abilityManager.getDroneBounds(ship.getX(), ship.getY()).getBounds2D())) {
+	                	abilityManager.damageDrone();
+	                	bulletsToRemove.add(bullet);
+	                }
                     
                     for (Asteroid asteroid : asteroids) {
                         if (asteroid.getBounds().intersects(bullet.getBounds().getBounds2D())) {
@@ -861,22 +1175,134 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 							}
                         }
                     }
-
-					// Check Fuel
-					if (ship.getFuel() > 1000) {
-						ship.setFuel(1000);
-					}
-                    
-                    // Ship hit by bullet
-                    if (!fadeActive && !ship.getVoidEnergy().isActive() && bullet.getBounds().intersects(ship.getBounds().getBounds2D())) {
-                        bulletDeath = true;
-                        startDeathSequence();
-                        return;
-                    }
                 }
+					
+				// ------ Nova Blast Collisions ------
+				// Nova Blast Destroying Asteroids
+				if (abilityManager.isNovaExploding()) {
+					double novaRadius = abilityManager.getNovaExplosionRadius();
+					for (Asteroid a : asteroids) {
+						double dx = a.getBounds().getBounds().getCenterX() - ship.getX();
+						double dy = a.getBounds().getBounds().getCenterY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						if (dist < novaRadius) {
+							particleSystem.createAsteroidExplosion(
+								a.getBounds().getBounds().getCenterX(),
+								a.getBounds().getBounds().getCenterY(),
+								a.getSize()
+							);
+								
+							switch (a.getSize()) {
+								case LARGE -> { scoreGain = 20; xpGain = 10; fuelGain = 20; largeDestroyed++; }
+								case MEDIUM -> { scoreGain = 10; xpGain = 5; fuelGain = 10; mediumDestroyed++; }
+								case SMALL -> { scoreGain = 5; xpGain = 3; fuelGain = 5; smallDestroyed++; }
+							}
+							score += scoreGain;
+							shipLevel.addXP(xpGain);
+							ship.addFuel(fuelGain);
+								
+							// Track old level
+							int oldLevel = shipLevel.getLevel();
+							
+							// Show floating text at collision point
+							Rectangle asteroidBounds = a.getBounds().getBounds();
+							double centerX = asteroidBounds.getCenterX();
+							double centerY = asteroidBounds.getCenterY();
+
+							floatingTextManager.add(FloatingTextManager.createFuel(fuelGain, centerX, centerY + 15));
+
+							// Show XP gain near ship
+							floatingTextManager.add(FloatingTextManager.createXP(xpGain, ship.getX() + 30, ship.getY() - 20));
+							
+							// Check for level up
+							if (shipLevel.getLevel() > oldLevel) {
+								showingLevelUp = true;
+								levelUpFrame = 0;
+									
+								// Create level up particle effect
+								particleSystem.createExplosion(
+									ship.getX(), ship.getY(),
+									shipLevel.getLevelColor(),
+									100, 8.0
+								);
+							}
+							
+							asteroidsToRemove.add(a);
+						}
+					}
+					
+					// Nova Blast Destroying Bullets
+					for (Bullet b : bullets) {
+						double dx = b.getBounds().getBounds().getCenterX() - ship.getX();
+						double dy = b.getBounds().getBounds().getCenterY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						if (dist < novaRadius) {
+							particleSystem.createBulletExplosion(
+								b.getBounds().getBounds().getCenterX(),
+								b.getBounds().getBounds().getCenterY()
+							);
+							bulletsToRemove.add(b);
+						}
+					}
+					
+					// Nova Blast Destroying Void Hazards
+					for (VoidHazard v : voidHazards) {
+						double dx = v.getCenterX() - ship.getX();
+						double dy = v.getCenterY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						if (dist < novaRadius) {
+							particleSystem.createVoidExplosion(
+								v.getCenterX(),
+								v.getCenterY()
+							);
+							voidHazardsToRemove.add(v);
+						}
+					}
+					
+					// Nova Blast Destroying Black Holes
+					for (BlackHole bh : blackHoles) {
+						double dx = bh.getX() - ship.getX();
+						double dy = bh.getY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						if (dist < novaRadius) {
+							particleSystem.createBlackHoleExplosion(
+								bh.getX(),
+								bh.getY()
+							);
+							blackHolesToRemove.add(bh);
+						}
+					}
+					
+					// Nova Blast Destroying Cosmic Entities
+					for (CosmicEntity ce : cosmicEntities) {
+						double dx = ce.getX() - ship.getX();
+						double dy = ce.getY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						if (dist < novaRadius) {
+							particleSystem.createCosmicEntityExplosion(
+								ce.getX(),
+								ce.getY()
+							);
+							cosmicEntitiesToRemove.add(ce);
+						}
+					}
+					
+					// Consume void energy
+					if (abilityManager.getNovaExplosionRadius() > 50) { // First frame
+						ship.getVoidEnergy().reset();
+					}
+				}
+				// Check Fuel
+				if (ship.getFuel() > 1000) {
+					ship.setFuel(1000);
+				}
+                
                 bullets.removeAll(bulletsToRemove);
                 asteroids.removeAll(asteroidsToRemove);
                 asteroids.addAll(newAsteroids);
+                voidHazards.removeAll(voidHazardsToRemove);
+                blackHoles.removeAll(blackHolesToRemove);
+                cosmicEntities.removeAll(cosmicEntitiesToRemove);
             	
             	repaint();
             }
@@ -980,7 +1406,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				if (noSavedGame && !showingInstructions) {
 					g2.setFont(new Font("Serif", Font.BOLD, 20));
 					g2.setColor(new Color(255, 80, 80, errorAlpha));
-					String errorMessage = "⚠ No saved game found";
+					String errorMessage = "⚠ No saved progress found";
 					int errorX = WIDTH / 2 - g2.getFontMetrics().stringWidth(errorMessage) / 2;
 					g2.drawString(errorMessage, errorX, HEIGHT / 2 - 60);
 				}
@@ -1024,6 +1450,18 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				//Draw teleport anchor
 				teleportAnchor.drawAnchor(g2);
 
+				// Draw shield effect
+				abilityManager.drawShieldEffect(g2, ship.getX(), ship.getY());
+
+				// Draw time slow effect
+				abilityManager.drawTimeSlowEffect(g2, WIDTH, HEIGHT);
+
+				// Draw drone
+				abilityManager.drawDrone(g2, ship.getX(), ship.getY());
+
+				// Draw nova blast
+				abilityManager.drawNovaBlast(g2, WIDTH, HEIGHT, ship.getX(), ship.getY());
+
 				// Draw floating texts
 				floatingTextManager.draw(g2);
 
@@ -1037,7 +1475,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				if (teleportFlashFrame > 0) { teleportAnchor.drawTeleportFlash(g2, WIDTH, HEIGHT, teleportFlashFrame); }
 
 				// Draw level up effect
-				if (showingLevelUp) { shipLevel.drawLevelUpEffect(g2, (int) ship.getX(), (int) ship.getY(), levelUpFrame); }
+				if (showingLevelUp) { shipLevel.drawLevelUpEffect(g2, (int) ship.getX(), (int) ship.getY(), WIDTH, HEIGHT, levelUpFrame); }
 
 				// Draw asteroids with enhanced effects
 				if (ship.getVoidEnergy().isActive()) {
@@ -1106,19 +1544,60 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				}
             }
             case "paused" -> {
-                g.setColor(Color.WHITE);
-                Font resumeFont = new Font("Serif", Font.BOLD, 18);
-                g.setFont(resumeFont);
-                FontMetrics metrics = g.getFontMetrics(resumeFont);
-                String pausedText = "PAUSED";
-                String resumeText = "Press ESC again to Resume";
-                // Draw "Paused"
-                Font pausedFont = new Font("Serif", Font.PLAIN, 40);
-                g.setFont(pausedFont);
-                g.drawString(pausedText, WIDTH / 2 - g.getFontMetrics().stringWidth(pausedText) / 2, HEIGHT / 2);
-                // Draw instruction text
-                g.setFont(resumeFont);
-                g.drawString(resumeText, WIDTH / 2 - metrics.stringWidth(resumeText) / 2, HEIGHT / 2 + 50);
+                // Dark overlay
+				g2.setColor(new Color(0, 0, 0, 200));
+				g2.fillRect(0, 0, WIDTH, HEIGHT);
+				
+				// Centered panel
+				int panelWidth = 400;
+				int panelHeight = 300;
+				int panelX = WIDTH / 2 - panelWidth / 2;
+				int panelY = HEIGHT / 2 - panelHeight / 2;
+				
+				g2.setColor(new Color(20, 25, 40, 250));
+				g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
+				
+				g2.setColor(new Color(100, 150, 255));
+				g2.setStroke(new BasicStroke(2));
+				g2.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
+				g2.setStroke(new BasicStroke(1));
+				
+				// Title
+				Font pausedFont = new Font("Arial", Font.BOLD, 40);
+				g.setFont(pausedFont);
+				g.setColor(new Color(150, 200, 255));
+				String pausedText = "PAUSED";
+				FontMetrics pfm = g.getFontMetrics();
+				g.drawString(pausedText, WIDTH / 2 - pfm.stringWidth(pausedText) / 2, panelY + 80);
+				
+				// Stats
+				g2.setFont(new Font("Arial", Font.PLAIN, 16));
+				g2.setColor(new Color(200, 200, 220));
+				int statsY = panelY + 140;
+				
+				String[] stats = {
+					"Level: " + level,
+					"Score: " + score,
+					"Fuel: " + (int)ship.getFuel(),
+					"Ship Level: " + shipLevel.getLevel()
+				};
+				
+				for (String stat : stats) {
+					FontMetrics fm = g2.getFontMetrics();
+					g2.drawString(stat, WIDTH / 2 - fm.stringWidth(stat) / 2, statsY);
+					statsY += 25;
+				}
+				
+				// Resume instruction
+				Font resumeFont = new Font("Arial", Font.PLAIN, 15);
+				g.setFont(resumeFont);
+				g.setColor(new Color(150, 200, 255));
+				String resumeText = "Press ESC to Resume";
+				FontMetrics metrics = g.getFontMetrics(resumeFont);
+				g.drawString(resumeText, WIDTH / 2 - metrics.stringWidth(resumeText) / 2, panelY + panelHeight - 40);
+				String menuText = "Press ENTER to Return to Menu";
+				FontMetrics menuMetrics = g.getFontMetrics(resumeFont);
+				g.drawString(menuText, WIDTH / 2 - menuMetrics.stringWidth(menuText) / 2, panelY + panelHeight - 15);
             }
             case "death" -> {
 				// Dark gradient background
@@ -1176,6 +1655,15 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				} else if (asteroidDeath) {
 					deathCause = "ASTEROID IMPACT";
 					causeColor = new Color(150, 150, 150);
+				} else if (voidHazardDeath) {
+					deathCause = "CONSUMED BY VOID HAZARD";
+					causeColor = new Color(180, 0, 255);
+				} else if (blackHoleDeath) {
+					deathCause = "CONSUMED BY BLACK HOLE";
+					causeColor = new Color(0, 0, 0);
+				} else if (cosmicEntityDeath) {
+					deathCause = "CONSUMED BY COSMIC ENTITY";
+					causeColor = new Color(255, 0, 255);
 				} else {
 					deathCause = "UNKNOWN CAUSE";
 					causeColor = new Color(200, 200, 200);
@@ -1276,22 +1764,21 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		
 		if (!levelStarting) {
-			// Top bar background
-			g2.setColor(new Color(20, 10, 40, 150));
-			g2.fillRoundRect(10, 10, WIDTH - 20, 60, 10, 10);
+			// Top bar
+			g2.setColor(new Color(20, 10, 40, 160));
+			g2.fillRect(10, 10, WIDTH - 20, 40);
 			g2.setColor(new Color(100, 50, 150));
-			g2.setStroke(new BasicStroke(2));
-			g2.drawRoundRect(10, 10, WIDTH - 20, 60, 10, 10);
 			g2.setStroke(new BasicStroke(1));
-			
-			// Level indicator (left)
-			g2.setFont(new Font("Serif", Font.BOLD, 24));
+			g2.drawRect(10, 10, WIDTH - 20, 40);
+
+			// Level text
+			g2.setFont(new Font("Arial", Font.BOLD, 20));
 			g2.setColor(new Color(255, 215, 0));
-			g2.drawString("LVL " + level, 30, 45);
+			g2.drawString("LVL " + level, 30, 40);
 			
 			// --- Time bar (center) ---
-			int timerBarWidth = 300;
-			int timerBarHeight = 35;
+			int timerBarWidth = 250;
+			int timerBarHeight = 20;
 			int timerBarX = WIDTH / 2 - timerBarWidth / 2;
 			int timerBarY = 20;
 			
@@ -1352,44 +1839,54 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 			int scanPos = (int) ((time / 10) % timerBarWidth);
 			g2.setColor(new Color(0, 255, 255, 100));
 			g2.fillRect(timerBarX + scanPos, timerBarY, 2, timerBarHeight);
+			
+			// Animated clock icon
+			int iconX = timerBarX - 20;
+			int iconY = timerBarY + timerBarHeight / 2;
+
+			// Clock circle
+			g2.setColor(new Color(90, 110, 70));
+			g2.fillOval(iconX - 10, iconY - 10, 20, 20);
+			g2.setColor(new Color(200, 200, 180));
+			g2.fillOval(iconX - 9, iconY - 9, 18, 18);
+
+			// Rotating clock hand (pointer)
+			double handAngle = (1.0 - timePercent) * 2 * Math.PI - Math.PI / 2; // Start at 12 o'clock, go clockwise
+			int handLength = 5;
+			int handX = iconX + (int)(handLength * Math.cos(handAngle));
+			int handY = iconY + (int)(handLength * Math.sin(handAngle));
+
+			g2.setColor(new Color(90, 110, 70));
+			g2.setStroke(new BasicStroke(1.5f));
+			g2.drawLine(iconX, iconY, handX, handY);
+			g2.setStroke(new BasicStroke(1));
 
 			// Time text with digital style
-			g2.setFont(new Font("Monospaced", Font.BOLD, 18));
-			g2.setColor(new Color(0, 255, 255));
+			g2.setFont(new Font("Times New Roman", Font.BOLD, 20));
+			//g2.setColor(new Color(0, 255, 255));
 			String timeText = String.format("%02d:%02d", secondsLeft / 60, secondsLeft % 60);
 			FontMetrics fm = g2.getFontMetrics();
 
-			// Text background
-			int textBgWidth = fm.stringWidth(timeText) + 10;
-			int textBgX = timerBarX + timerBarWidth / 2 - textBgWidth / 2;
-			g2.setColor(new Color(0, 0, 0, 180));
-			g2.fillRect(textBgX, timerBarY + 8, textBgWidth, 20);
-
-			// Text with glow
-			g2.setColor(new Color(0, 200, 255, 100));
-			g2.drawString(timeText, 
-				timerBarX + timerBarWidth / 2 - fm.stringWidth(timeText) / 2 - 1, 
-				timerBarY + 23);
-			g2.setColor(new Color(0, 255, 255));
-			g2.drawString(timeText, 
-				timerBarX + timerBarWidth / 2 - fm.stringWidth(timeText) / 2, 
-				timerBarY + 24);
+			// Time Text
+			g2.setColor(new Color(200, 200, 180));
+			g2.drawString(timeText, timerBarX + timerBarWidth + 8, timerBarY + timerBarHeight - 4);
 
 			g2.setStroke(new BasicStroke(1)); // Reset stroke
-		}
-		// --- Score and Fuel (right) ---
-			g2.setFont(new Font("Serif", Font.BOLD, 20));
-			String scoreText = "⭐ " + score;
-			String fuelText = "⛽ " + (int) ship.getFuel();
 			
+			// --- Score and Fuel (right) ---
+			g2.setFont(new Font("Arial", Font.PLAIN, 15));
+			String scoreText = "Score: " + score;
+			String fuelText = "Fuel: " + (int) ship.getFuel();
+
 			int rightX = WIDTH - 30;
 			FontMetrics rightFm = g2.getFontMetrics();
-			
+
 			g2.setColor(new Color(255, 215, 0));
-			g2.drawString(scoreText, rightX - rightFm.stringWidth(scoreText), 35);
-			
+			g2.drawString(scoreText, rightX - rightFm.stringWidth(scoreText), 25);
+
 			g2.setColor(new Color(255, 150, 50));
-			g2.drawString(fuelText, rightX - rightFm.stringWidth(fuelText), 55);
+			g2.drawString(fuelText, rightX - rightFm.stringWidth(fuelText), 40);
+		}
 		
 		// --- Void energy bar (always show if > 0) ---
 		ship.getVoidEnergy().drawBar(g2, WIDTH, HEIGHT);
@@ -1416,48 +1913,38 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 			// Text
 			g2.setColor(new Color(255, 255, 0, pulse));
 			g2.drawString(fadeText, fadeTextX, fadeTextY);
+			}
 		}
-	}
 
-	// Level transitions
-	private void drawLevelTransition(Graphics2D g2) {
-		// Fade overlay
-		int overlayAlpha = Math.min(255, levelDisplayAlpha);
+		// Level transitions
+		private void drawLevelTransition(Graphics2D g2) {
+		// Minimal dark overlay
+		int overlayAlpha = Math.min(200, levelDisplayAlpha);
 		g2.setColor(new Color(0, 0, 0, overlayAlpha / 2));
 		g2.fillRect(0, 0, WIDTH, HEIGHT);
 		
-		// Countdown
-		g2.setColor(Color.WHITE);
-		g2.setFont(new Font("Serif", Font.PLAIN, 22));
-		int secondsLeft = (levelStartCountdown / 60) + 1;
-		String countdownText = "Starting in: " + secondsLeft;
-		int textWidth = g2.getFontMetrics().stringWidth(countdownText);
-		g2.drawString(countdownText, WIDTH / 2 - textWidth / 2, 50);
-		
-		// Level display
+		// Clean level text
 		String levelText = "LEVEL " + (level + 1);
-		g2.setFont(new Font("Serif", Font.BOLD, 100));
+		g2.setFont(new Font("Times New Roman", Font.BOLD, 80));
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, levelDisplayAlpha / 255f));
 		
 		FontMetrics levelFm = g2.getFontMetrics();
-		textWidth = levelFm.stringWidth(levelText);
-		int textHeight = levelFm.getAscent();
-		int levelY = HEIGHT / 2 + textHeight / 4;
+		int textWidth = levelFm.stringWidth(levelText);
+		int levelY = HEIGHT / 2;
 		
-		// Glow effect
-		for (int i = 8; i > 0; i -= 2) {
-			g2.setColor(new Color(255, 215, 0, 20));
-			g2.drawString(levelText, WIDTH / 2 - textWidth / 2 - i, levelY - i);
-			g2.drawString(levelText, WIDTH / 2 - textWidth / 2 + i, levelY + i);
-		}
-		
-		GradientPaint levelGradient = new GradientPaint(
-			0, levelY - 50, new Color(255, 215, 0),
-			0, levelY + 50, new Color(255, 165, 0)
-		);
-		g2.setPaint(levelGradient);
+		g2.setColor(new Color(255, 215, 0));
 		g2.drawString(levelText, WIDTH / 2 - textWidth / 2, levelY);
 		
+		// Simple countdown
+		g2.setFont(new Font("Arial", Font.PLAIN, 20));
+		int secondsLeft = (levelStartCountdown / 60) + 1;
+		String countdownText = "Starting in " + secondsLeft;
+		FontMetrics fm = g2.getFontMetrics();
+		g2.setColor(Color.WHITE);
+		g2.drawString(countdownText, WIDTH / 2 - fm.stringWidth(countdownText) / 2, levelY + 60);
+		
+		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
+			
 		// Speed warning
 		if (level >= 3 && level <= 10) {
 			g2.setFont(new Font("Serif", Font.ITALIC, 30));
@@ -1635,7 +2122,25 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 switch (e.getKeyCode()) {
                     case KeyEvent.VK_ENTER -> startNewGame();
                     case KeyEvent.VK_I -> showingInstructions = !showingInstructions;
-                }
+					case KeyEvent.VK_LEFT -> {
+						if (showingInstructions && instructionPage > 0) {
+							instructionPage--;
+						}
+					}
+					case KeyEvent.VK_RIGHT -> {
+						if (showingInstructions && instructionPage < totalInstructionPages - 1) {
+							instructionPage++;
+						}
+					}
+					case KeyEvent.VK_S -> {
+						if (noSavedGame) {
+							// No saved game to load
+							break;
+						}
+						resumeGame();
+						gameState = "playing";
+                	}
+				}
             }
             case "playing" -> {
                 switch (e.getKeyCode()) {
@@ -1643,46 +2148,12 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                     case KeyEvent.VK_LEFT -> rotatingLeft = true;
                     case KeyEvent.VK_RIGHT -> rotatingRight = true;
                     case KeyEvent.VK_SPACE -> ship.setHyper(true);
-                    case KeyEvent.VK_D -> {
-						// Void toggle - only if unlocked and not on cooldown
-						if (shipLevel.isAbilityUnlocked("void") && voidCooldownTimer == 0) {
-							toggleVoidWorld();
-							if (!ship.getVoidEnergy().isActive()) {
-								// Started cooldown when exiting
-								voidCooldownTimer = voidMaxCooldown;
-								abilityManager.startVoidCooldown();
-							}
-						}
-					}
-                    case KeyEvent.VK_ESCAPE -> {
+					case KeyEvent.VK_ESCAPE -> {
                         gameState = "paused";
                         noSavedGame = false;
                         saveGame();
-                        setupPauseMenu();
                     }
-					case KeyEvent.VK_F -> {
-						// Fade toggle - only if unlocked and not on cooldown
-						if (shipLevel.isAbilityUnlocked("fade") && !fadeActive && fadeCooldownTimer == 0) {
-							fadeActive = true;
-							fadeTimer = maxFadeTime;
-						}
-					}
-					case KeyEvent.VK_T -> {
-						// Teleport - only if unlocked
-						if (shipLevel.isAbilityUnlocked("teleport")) {
-							if (!teleportAnchor.isAnchorPlaced() && !teleportAnchor.isOnCooldown()) {
-								// Place anchor
-								teleportAnchor.placeAnchor(ship.getX(), ship.getY());
-							} else if (teleportAnchor.isAnchorPlaced()) {
-								// Teleport to anchor
-								if (teleportAnchor.teleportToAnchor(ship)) {
-									teleportFlashFrame = 15;
-									abilityManager.startTeleportCooldown();
-								}
-							}
-						}
-					}
-                    case KeyEvent.VK_S -> {
+					case KeyEvent.VK_S -> {
                         // Cannot shoot when Fade is active
 						if (fadeActive) { return; }
 
@@ -1707,11 +2178,74 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                             bullets.add(new Bullet(spawnX, spawnY, ship.getAngle()));
                         }
                     }
+                    case KeyEvent.VK_D -> {
+						// Void toggle - only if unlocked and not on cooldown
+						if (shipLevel.isAbilityUnlocked("void") && voidCooldownTimer == 0) {
+							toggleVoidWorld();
+							if (!ship.getVoidEnergy().isActive()) {
+								// Started cooldown when exiting
+								voidCooldownTimer = voidMaxCooldown;
+								abilityManager.startVoidCooldown();
+							}
+						}
+					}
+					case KeyEvent.VK_F -> {
+						// Fade toggle - only if unlocked and not on cooldown
+						if (shipLevel.isAbilityUnlocked("fade") && !fadeActive && fadeCooldownTimer == 0) {
+							fadeActive = true;
+							fadeTimer = maxFadeTime;
+						}
+					}
+					case KeyEvent.VK_T -> {
+						// Teleport - only if unlocked
+						if (shipLevel.isAbilityUnlocked("teleport")) {
+							if (!teleportAnchor.isAnchorPlaced() && !teleportAnchor.isOnCooldown()) {
+								// Place anchor
+								teleportAnchor.placeAnchor(ship.getX(), ship.getY());
+							} else if (teleportAnchor.isAnchorPlaced()) {
+								// Teleport to anchor
+								if (teleportAnchor.teleportToAnchor(ship)) {
+									teleportFlashFrame = 15;
+									abilityManager.startTeleportCooldown();
+								}
+							}
+						}
+					}
+					case KeyEvent.VK_Q -> {
+						// Shield Burst
+						if (shipLevel.isAbilityUnlocked("shield")) {
+							abilityManager.activateShield();
+						}
+					}
+					case KeyEvent.VK_R -> {
+						// Time Slow
+						if (shipLevel.isAbilityUnlocked("timeslow")) {
+							abilityManager.activateTimeSlow();
+						}
+					}
+					case KeyEvent.VK_E -> {
+						// Drone toggle
+						if (shipLevel.isAbilityUnlocked("drone")) {
+							abilityManager.toggleDrone();
+						}
+					}
+					case KeyEvent.VK_X -> {
+						// Nova Blast
+						if (shipLevel.isAbilityUnlocked("nova")) {
+							abilityManager.activateNova(ship.getVoidEnergy());
+						}
+					}
                 }
             }
             case "paused" -> {
                 switch (e.getKeyCode()) {
                     case KeyEvent.VK_ESCAPE -> gameState = "playing";
+					case KeyEvent.VK_ENTER -> {
+						gameState = "menu";
+						setupMenu();
+						revalidate();
+						repaint();
+					}
                 }
             }
             case "death" -> {
