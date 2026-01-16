@@ -109,6 +109,11 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     // Save system
     private final File saveFile = new File("save.dat");
     private final File leaderBoardDataFile = new File("leaderBoardData.dat");
+	// Control Config
+	private ControlConfig controlConfig;
+	private AbilityLoadout abilityLoadout;
+	private ControlPanel controlPanel;
+	private boolean showingControlPanel = false;
 
 
 	public AsteroidGame() {
@@ -170,6 +175,11 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		hoveredButton = -1;
 		showingInstructions = false;
 		noSavedGame = true;
+		abilityLoadout = new AbilityLoadout();
+		controlConfig = new ControlConfig();
+		controlPanel = new ControlPanel(abilityLoadout, controlConfig);
+		controlPanel.setBounds(0, 0, WIDTH, HEIGHT);
+		showingControlPanel = false;
 	}
 
     void setupMenu() {
@@ -208,6 +218,21 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						showingInstructions = true;
 					}
 				}
+
+				// Controls button bounds
+				if (mx >= WIDTH/2 - 100 && mx <= WIDTH/2 + 100 &&
+					my >= HEIGHT/2 + 190 && my <= HEIGHT/2 + 230) {
+					showingControlPanel = !showingControlPanel;
+					if (showingControlPanel) {
+						add(controlPanel);
+						controlPanel.requestFocusInWindow();
+					} else {
+						remove(controlPanel);
+						requestFocusInWindow();
+					}
+					revalidate();
+					repaint();
+				}
 			}
 			
 		});
@@ -231,6 +256,9 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				} else if (mx >= WIDTH/2 - 100 && mx <= WIDTH/2 + 100 && 
 					my >= HEIGHT/2 + 120 && my <= HEIGHT/2 + 160) {
 					hoveredButton = 2; // Instructions
+				} else if (mx >= WIDTH/2 - 100 && mx <= WIDTH/2 + 100 && 
+					my >= HEIGHT/2 + 190 && my <= HEIGHT/2 + 230) {
+					hoveredButton = 3; // Controls
 				}
 				repaint();
 			}
@@ -298,7 +326,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 
 	private void drawInstructionsPopup(Graphics2D g2) {
 		// Semi-transparent backdrop
-		g2.setColor(new Color(0, 0, 0, 80));
+		g2.setColor(new Color(0, 0, 0, 180));
 		g2.fillRect(0, 0, WIDTH, HEIGHT);
 		
 		// Popup panel
@@ -351,29 +379,62 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		}
 		
 		// Navigation arrows
-		g2.setFont(new Font("Arial", Font.BOLD, 20));
-		g2.setColor(new Color(150, 200, 255));
-		
-		// Left arrow
-		if (instructionPage > 0) {
-			String leftArrow = "◄ PREV";
-			g2.drawString(leftArrow, panelX + padding, panelY + panelHeight - padding);
-		}
-		
-		// Right arrow
-		if (instructionPage < totalInstructionPages - 1) {
-			String rightArrow = "NEXT ►";
-			FontMetrics arrowFm = g2.getFontMetrics();
-			g2.drawString(rightArrow, panelX + panelWidth - arrowFm.stringWidth(rightArrow) - padding, 
-						panelY + panelHeight - padding);
-		}
-		
-		// Close hint
-		g2.setFont(new Font("Arial", Font.PLAIN, 12));
-		g2.setColor(new Color(150, 150, 180));
-		String closeHint = "Press [I] to close • Use Arrow Keys to navigate";
-		int hintWidth = g2.getFontMetrics().stringWidth(closeHint);
-		g2.drawString(closeHint, panelX + panelWidth/2 - hintWidth/2, panelY + panelHeight - padding);
+		g2.setFont(new Font("Arial", Font.BOLD, 16));
+    
+    // Left arrow button
+    if (instructionPage > 0) {
+        int leftBtnX = panelX + 50;
+        int leftBtnY = panelY + panelHeight - 50;
+        int btnWidth = 100;
+        int btnHeight = 35;
+        
+        // Background
+        g2.setColor(new Color(50, 60, 80, 150));
+        g2.fillRoundRect(leftBtnX, leftBtnY, btnWidth, btnHeight, 8, 8);
+        
+        // Border
+        g2.setColor(new Color(100, 150, 255));
+        g2.setStroke(new BasicStroke(1));
+        g2.drawRoundRect(leftBtnX, leftBtnY, btnWidth, btnHeight, 8, 8);
+        
+        // Text
+        g2.setColor(new Color(150, 200, 255));
+        String leftArrow = "◄ PREV";
+        FontMetrics fm = g2.getFontMetrics();
+        g2.drawString(leftArrow, leftBtnX + btnWidth/2 - fm.stringWidth(leftArrow)/2, leftBtnY + 23);
+    }
+    
+    // Right arrow button
+    if (instructionPage < totalInstructionPages - 1) {
+        int rightBtnX = panelX + panelWidth - 150;
+        int rightBtnY = panelY + panelHeight - 50;
+        int btnWidth = 100;
+        int btnHeight = 35;
+        
+        // Background
+        g2.setColor(new Color(50, 60, 80, 150));
+        g2.fillRoundRect(rightBtnX, rightBtnY, btnWidth, btnHeight, 8, 8);
+        
+        // Border
+        g2.setColor(new Color(100, 150, 255));
+        g2.setStroke(new BasicStroke(1));
+        g2.drawRoundRect(rightBtnX, rightBtnY, btnWidth, btnHeight, 8, 8);
+        
+        // Text
+        g2.setColor(new Color(150, 200, 255));
+        String rightArrow = "NEXT ►";
+        FontMetrics fm = g2.getFontMetrics();
+        g2.drawString(rightArrow, rightBtnX + btnWidth/2 - fm.stringWidth(rightArrow)/2, rightBtnY + 23);
+    }
+    
+    g2.setStroke(new BasicStroke(1));  // Reset stroke
+    
+    // Close hint (matching control panel instructions style)
+    g2.setFont(new Font("Arial", Font.PLAIN, 12));
+    g2.setColor(new Color(150, 150, 180));
+    String closeHint = "• Press [I] or [ESC] to close • Use Arrow Keys to navigate";
+    int hintWidth = g2.getFontMetrics().stringWidth(closeHint);
+    g2.drawString(closeHint, panelX + panelWidth/2 - hintWidth/2, panelY + panelHeight - 15);
 	}
 
 	private void drawQuickStartPage(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
@@ -387,14 +448,13 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		textY += lineHeight;
 		
 		String[][] movementControlDisplay = {
-			{"↑", "Thrust Forward"},
-			{"← →", "Rotate Ship"},
-			{"SPACE", "Hyper Mode (Fast Movement & Rotation)"},
-			{"S", "Fire Weapon"}
+			{controlConfig.getKeyName(controlConfig.getKey("thrust")), "Thrust"},
+			{controlConfig.getKeyName(controlConfig.getKey("left")) + " " + controlConfig.getKeyName(controlConfig.getKey("right")), "Rotate"},
+			{controlConfig.getKeyName(controlConfig.getKey("hyper")), "Hyper Mode"},
+			{controlConfig.getKeyName(controlConfig.getKey("shoot")), "Fire Weapon"}
 		};
 		
-		g2.setFont(new Font("Arial", Font.PLAIN, 13));		
-		g2.setColor(new Color(220, 220, 240));
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));
 		for (String[] line : movementControlDisplay) {
 			g2.setColor(new Color(100, 255, 150));
 			g2.drawString(line[0], textX, textY);
@@ -403,19 +463,19 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 			textY += lineHeight;
 		}
 		
-		// Objective Display
+		// Shortcuts
 		String[][] shortcutDisplay = {
-			{"I", "Show/Hide instructions page"},
-			{"ENTER", "(menu) start a new game; (death) return to menu"},
-			{"ESC", "Pause and Save Game"}
+			{"I", "Show/Hide instructions"},
+			{"C", "Open Control Panel"},
+			{"ENTER", "Start game / Return to menu"},
+			{"ESC", "Exit Popups & Pause and Save Game"}
 		};
 		g2.setFont(new Font("Arial", Font.BOLD, 14));
 		g2.setColor(new Color(255, 200, 100));
 		g2.drawString("SHORTCUTS:", textX, textY);
 		textY += lineHeight;
 		
-		g2.setFont(new Font("Arial", Font.PLAIN, 13));		
-		g2.setColor(new Color(220, 220, 240));
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));
 		for (String[] line : shortcutDisplay) {
 			g2.setColor(new Color(100, 255, 150));
 			g2.drawString(line[0], textX, textY);
@@ -424,24 +484,25 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 			textY += lineHeight;
 		}
 		
-		// Basic Ability Description
-		String[][] basicAbilityDescription = {
-			{"D", "Enter/Exit the Void, avoid Asteroid collision, no Void Hazard collision outside of the Void"},
-			{"F", "Fade and become invulnerable, no collision, can't use weapon, only lasts 5 sec"},
-			{"T", "Leaves an anchor, press again to teleport to the anchor"},
-			{"Q", "Destroys surrounding asteroids, temporary invulnerability"},
-			{"R", "Slows everything for a period except for ship and weapon"},
-			{"E", "Deploy drone that auto-fires at closest asteroid"},
-			{"X", "clears the entire screen after a short charging period"}
+		// ALL Abilities with current keys
+		String[][] allAbilities = {
+			{controlConfig.getKeyName(controlConfig.getKey("ability1")), 
+			abilityLoadout.getSlot(0) + " (Slot 1)"},
+			{controlConfig.getKeyName(controlConfig.getKey("ability2")), 
+			abilityLoadout.getSlot(1) + " (Slot 2)"},
+			{controlConfig.getKeyName(controlConfig.getKey("ability3")), 
+			abilityLoadout.getSlot(2) + " (Slot 3)"},
+			{controlConfig.getKeyName(controlConfig.getKey("ability4")), 
+			abilityLoadout.getSlot(3) + " (Slot 4)"}
 		};
+		
 		g2.setFont(new Font("Arial", Font.BOLD, 14));
 		g2.setColor(new Color(255, 200, 100));
-		g2.drawString("ABILITIES (basic description):", textX, textY);
+		g2.drawString("EQUIPPED ABILITIES:", textX, textY);
 		textY += lineHeight;
 		
-		g2.setFont(new Font("Arial", Font.PLAIN, 13));		
-		g2.setColor(new Color(220, 220, 240));
-		for (String[] line : basicAbilityDescription) {
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));
+		for (String[] line : allAbilities) {
 			g2.setColor(new Color(100, 255, 150));
 			g2.drawString(line[0], textX, textY);
 			g2.setColor(new Color(200, 200, 240));
@@ -1393,17 +1454,20 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				g2.drawString(subtitle, WIDTH / 2 - subtitleWidth / 2, titleY + 50);
 				
 				// Instructions popup
-				if (showingInstructions) { drawInstructionsPopup(g2);}
+				if (showingInstructions) { drawInstructionsPopup(g2); }
+				// Control Panel popup
+				if (showingControlPanel) { controlPanel.paintComponent(g2); }
 				
 				// Buttons
-				if (!showingInstructions) {
+				if (!showingInstructions && !showingControlPanel) {
 					drawMenuButton(g2, "New Game", HEIGHT/2 - 20, hoveredButton == 0, true);
 					drawMenuButton(g2, "Resume", HEIGHT/2 + 50, hoveredButton == 1, !noSavedGame);
 					drawMenuButton(g2, "Instructions", HEIGHT/2 + 120, hoveredButton == 2, true);
+					drawMenuButton(g2, "Controls", HEIGHT/2 + 190, hoveredButton == 3, true);
 				}
 				
 				// Error message with fade effect
-				if (noSavedGame && !showingInstructions) {
+				if (noSavedGame && !showingInstructions && !showingControlPanel) {
 					g2.setFont(new Font("Serif", Font.BOLD, 20));
 					g2.setColor(new Color(255, 80, 80, errorAlpha));
 					String errorMessage = "⚠ No saved progress found";
@@ -2115,13 +2179,100 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		g2.setStroke(new BasicStroke(1));
 	}
 
+	private void activateAbility(int slot) {
+		String ability = abilityLoadout.getSlot(slot);
+		if (ability == null) return;
+		
+		switch (ability) {
+			case "void" -> { 
+				// Void toggle - only if unlocked and not on cooldown
+				if (shipLevel.isAbilityUnlocked("void") && voidCooldownTimer == 0) {
+					toggleVoidWorld();
+					if (!ship.getVoidEnergy().isActive()) {
+						// Started cooldown when exiting
+						voidCooldownTimer = voidMaxCooldown;
+						abilityManager.startVoidCooldown();
+					}
+				}
+			}
+			case "fade" -> { 
+				// Fade toggle - only if unlocked and not on cooldown
+				if (shipLevel.isAbilityUnlocked("fade") && !fadeActive && fadeCooldownTimer == 0) {
+					fadeActive = true;
+					fadeTimer = maxFadeTime;
+				}
+			}
+			case "teleport" -> {
+				if (shipLevel.isAbilityUnlocked("teleport")) {
+					if (!teleportAnchor.isAnchorPlaced() && !teleportAnchor.isOnCooldown()) {
+						// Place anchor
+						teleportAnchor.placeAnchor(ship.getX(), ship.getY());
+					} else if (teleportAnchor.isAnchorPlaced()) {
+						// Teleport to anchor
+						if (teleportAnchor.teleportToAnchor(ship)) {
+							teleportFlashFrame = 15;
+							abilityManager.startTeleportCooldown();
+						}
+					}
+				}
+			}
+			case "shield" -> { if (shipLevel.isAbilityUnlocked("shield")) abilityManager.activateShield(); }
+			case "timeslow" -> { if (shipLevel.isAbilityUnlocked("timeslow")) abilityManager.activateTimeSlow(); }
+			case "drone" -> { if (shipLevel.isAbilityUnlocked("drone")) abilityManager.toggleDrone(); }
+			case "nova" -> { if (shipLevel.isAbilityUnlocked("nova")) abilityManager.activateNova(ship.getVoidEnergy()); }
+		}
+	}
+
+	private void handleShoot() {
+		if (fadeActive) return;
+		if (ship.getVoidEnergy().getEnergy() > 0) {
+			Point2D.Double tip = ship.getTipPosition();
+			voidLasers.add(new VoidLaser(tip.x, tip.y, ship.getAngle(), WIDTH, HEIGHT));
+			if (ship.getVoidEnergy().isActive()) ship.getVoidEnergy().absorbForAction(2.0);
+			else ship.getVoidEnergy().dissipateForAction(5.0);
+		} else {
+			Point2D.Double tip = ship.getTipPosition();
+			double spawnX = tip.x + 30 * Math.sin(ship.getAngle());
+			double spawnY = tip.y - 30 * Math.cos(ship.getAngle());
+			bullets.add(new Bullet(spawnX, spawnY, ship.getAngle()));
+		}
+	}
+
     @Override
     public void keyPressed(KeyEvent e) {
         switch (gameState) {
             case "menu" -> {
-                switch (e.getKeyCode()) {
+				switch (e.getKeyCode()) {
                     case KeyEvent.VK_ENTER -> startNewGame();
                     case KeyEvent.VK_I -> showingInstructions = !showingInstructions;
+					case KeyEvent.VK_C -> {
+						if (showingControlPanel) {
+							showingControlPanel = false;
+							remove(controlPanel);
+							requestFocusInWindow();
+							revalidate();
+							repaint();
+						} else {
+							showingControlPanel = true;
+							add(controlPanel);
+							controlPanel.requestFocusInWindow();
+							revalidate();
+							repaint();
+						}
+					}
+					case KeyEvent.VK_ESCAPE -> {
+						if (showingInstructions) {
+							showingInstructions = false;
+							instructionPage = 0;
+						}
+						if (showingControlPanel) {
+							showingControlPanel = false;
+							remove(controlPanel);
+							requestFocusInWindow();
+							revalidate();
+							repaint();
+						}
+					}
 					case KeyEvent.VK_LEFT -> {
 						if (showingInstructions && instructionPage > 0) {
 							instructionPage--;
@@ -2142,101 +2293,23 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 	}
 				}
             }
-            case "playing" -> {
-                switch (e.getKeyCode()) {
-                    case KeyEvent.VK_UP -> thrusting = true;
-                    case KeyEvent.VK_LEFT -> rotatingLeft = true;
-                    case KeyEvent.VK_RIGHT -> rotatingRight = true;
-                    case KeyEvent.VK_SPACE -> ship.setHyper(true);
-					case KeyEvent.VK_ESCAPE -> {
-                        gameState = "paused";
-                        noSavedGame = false;
-                        saveGame();
-                    }
-					case KeyEvent.VK_S -> {
-                        // Cannot shoot when Fade is active
-						if (fadeActive) { return; }
-
-						if (ship.getVoidEnergy().getEnergy() > 0) {
-                            // Fire void laser
-                            Point2D.Double tip = ship.getTipPosition();
-                            voidLasers.add(new VoidLaser(tip.x, tip.y, ship.getAngle(), WIDTH, HEIGHT));
-                            
-							// Absorbs additional void energy when in the Void, otherwise dissipates more
-							if (ship.getVoidEnergy().isActive()) { 
-								ship.getVoidEnergy().absorbForAction(2.0); 
-							} else {
-								ship.getVoidEnergy().dissipateForAction(5.0);
-							}
-
-                        } else {
-                            // Fire normal bullet
-                            Point2D.Double tip = ship.getTipPosition();
-                            double bulletSpawnDistance = 30;
-                            double spawnX = tip.x + bulletSpawnDistance * Math.sin(ship.getAngle());
-                            double spawnY = tip.y - bulletSpawnDistance * Math.cos(ship.getAngle());
-                            bullets.add(new Bullet(spawnX, spawnY, ship.getAngle()));
-                        }
-                    }
-                    case KeyEvent.VK_D -> {
-						// Void toggle - only if unlocked and not on cooldown
-						if (shipLevel.isAbilityUnlocked("void") && voidCooldownTimer == 0) {
-							toggleVoidWorld();
-							if (!ship.getVoidEnergy().isActive()) {
-								// Started cooldown when exiting
-								voidCooldownTimer = voidMaxCooldown;
-								abilityManager.startVoidCooldown();
-							}
-						}
-					}
-					case KeyEvent.VK_F -> {
-						// Fade toggle - only if unlocked and not on cooldown
-						if (shipLevel.isAbilityUnlocked("fade") && !fadeActive && fadeCooldownTimer == 0) {
-							fadeActive = true;
-							fadeTimer = maxFadeTime;
-						}
-					}
-					case KeyEvent.VK_T -> {
-						// Teleport - only if unlocked
-						if (shipLevel.isAbilityUnlocked("teleport")) {
-							if (!teleportAnchor.isAnchorPlaced() && !teleportAnchor.isOnCooldown()) {
-								// Place anchor
-								teleportAnchor.placeAnchor(ship.getX(), ship.getY());
-							} else if (teleportAnchor.isAnchorPlaced()) {
-								// Teleport to anchor
-								if (teleportAnchor.teleportToAnchor(ship)) {
-									teleportFlashFrame = 15;
-									abilityManager.startTeleportCooldown();
-								}
-							}
-						}
-					}
-					case KeyEvent.VK_Q -> {
-						// Shield Burst
-						if (shipLevel.isAbilityUnlocked("shield")) {
-							abilityManager.activateShield();
-						}
-					}
-					case KeyEvent.VK_R -> {
-						// Time Slow
-						if (shipLevel.isAbilityUnlocked("timeslow")) {
-							abilityManager.activateTimeSlow();
-						}
-					}
-					case KeyEvent.VK_E -> {
-						// Drone toggle
-						if (shipLevel.isAbilityUnlocked("drone")) {
-							abilityManager.toggleDrone();
-						}
-					}
-					case KeyEvent.VK_X -> {
-						// Nova Blast
-						if (shipLevel.isAbilityUnlocked("nova")) {
-							abilityManager.activateNova(ship.getVoidEnergy());
-						}
-					}
-                }
-            }
+			case "playing" -> {
+				int key = e.getKeyCode();
+				if (key == controlConfig.getKey("thrust")) thrusting = true;
+				else if (key == controlConfig.getKey("left")) rotatingLeft = true;
+				else if (key == controlConfig.getKey("right")) rotatingRight = true;
+				else if (key == controlConfig.getKey("hyper")) ship.setHyper(true);
+				else if (key == controlConfig.getKey("shoot")) handleShoot();
+				else if (key == controlConfig.getKey("ability1")) activateAbility(0);
+				else if (key == controlConfig.getKey("ability2")) activateAbility(1);
+				else if (key == controlConfig.getKey("ability3")) activateAbility(2);
+				else if (key == controlConfig.getKey("ability4")) activateAbility(3);
+				else if (key == KeyEvent.VK_ESCAPE) {
+					gameState = "paused";
+                    noSavedGame = false;
+                    saveGame();
+				}
+			}
             case "paused" -> {
                 switch (e.getKeyCode()) {
                     case KeyEvent.VK_ESCAPE -> gameState = "playing";
@@ -2262,12 +2335,11 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     @Override
     public void keyReleased(KeyEvent e) {
     	if (gameState.equals("playing")) {
-    	    switch (e.getKeyCode()) {
-	            case KeyEvent.VK_UP -> thrusting = false;
-	            case KeyEvent.VK_LEFT -> rotatingLeft = false;
-	            case KeyEvent.VK_RIGHT -> rotatingRight = false;
-	            case KeyEvent.VK_SPACE -> ship.setHyper(false);
-	        }
+    	    int key = e.getKeyCode();
+	        if (key == controlConfig.getKey("thrust")) thrusting = false;
+	        else if (key == controlConfig.getKey("left")) rotatingLeft = false;
+	        else if (key == controlConfig.getKey("right")) rotatingRight = false;
+	        else if (key == controlConfig.getKey("hyper")) ship.setHyper(false);
     	}
     }
 
