@@ -23,6 +23,7 @@ public class StarField {
     private final Random rand = new Random();
     private final int width, height;
     private boolean voidMode = false;
+    private double lastShipVX = 0, lastShipVY = 0;
     
     public StarField(int width, int height, int count) {
         this.width = width;
@@ -43,6 +44,8 @@ public class StarField {
     
     public void update(double shipX, double shipY, double shipVX, double shipVY) {
         for (Star star : stars) {
+            lastShipVX = shipVX;
+            lastShipVY = shipVY;
             // Parallax effect based on depth
             star.x -= shipVX * star.z * 0.5;
             star.y -= shipVY * star.z * 0.5;

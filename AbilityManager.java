@@ -249,8 +249,8 @@ public class AbilityManager {
         return novaState == NovaState.CHARGING ? (float)novaChargeTimer / novaChargeDuration : 0f;
     }
     
-    public void drawAbilityBar(Graphics2D g2d, int screenWidth, int screenHeight) {
-        int barWidth = 600;
+    public void drawAbilityBar(Graphics2D g2d, int screenWidth, int screenHeight, AbilityLoadout loadout) {
+        int barWidth = 400;  // Reduced from 600
         int barHeight = 70;
         int barX = screenWidth / 2 - barWidth / 2;
         int barY = screenHeight - barHeight - 20;
@@ -265,19 +265,33 @@ public class AbilityManager {
         g2d.drawRoundRect(barX, barY, barWidth, barHeight, 12, 12);
         g2d.setStroke(new BasicStroke(1));
         
-        // Draw each ability
-        Ability[] abilities = {voidAbility, fadeAbility, teleportAbility, 
-                              shieldAbility, timeSlowAbility, droneAbility, novaAbility};
-        int abilitySpacing = barWidth / 7;
+        // Draw only the 4 equipped abilities
+        Ability[] allAbilities = {voidAbility, fadeAbility, teleportAbility, 
+                                shieldAbility, timeSlowAbility, droneAbility, novaAbility};
         
-        for (int i = 0; i < abilities.length; i++) {
-            Ability ability = abilities[i];
-            int abilityX = barX + i * abilitySpacing + abilitySpacing / 2;
-            int abilityY = barY + barHeight / 2;
+        int abilitySpacing = barWidth / 4;
+        
+        for (int i = 0; i < 4; i++) {
+            String abilityName = loadout.getSlot(i);
+            if (abilityName == null) continue;
             
-            drawAbilityIcon(g2d, ability, abilityX, abilityY);
+            // Find matching ability
+            Ability ability = null;
+            for (Ability a : allAbilities) {
+                if (a.name.equalsIgnoreCase(abilityName)) {
+                    ability = a;
+                    break;
+                }
+            }
+            
+            if (ability != null) {
+                int abilityX = barX + i * abilitySpacing + abilitySpacing / 2;
+                int abilityY = barY + barHeight / 2;
+                
+                drawAbilityIcon(g2d, ability, abilityX, abilityY);
+            }
         }
-    }    
+    }
     
     private void drawAbilityIcon(Graphics2D g2d, Ability ability, int centerX, int centerY) {
         int iconSize = 45;
@@ -301,7 +315,7 @@ public class AbilityManager {
         // Ready flash effect
         int flashAlpha = (int)(255 * (ability.flashTimer / 30));
         if (ability.drawFlash) {
-        	g2d.setColor(new Color(255, 255, 255, flashAlpha));
+            g2d.setColor(new Color(255, 255, 255, flashAlpha));
             g2d.fillOval(x - 3, y - 3, iconSize + 6, iconSize + 6);
         }
         
@@ -319,14 +333,17 @@ public class AbilityManager {
         g2d.drawOval(x, y, iconSize, iconSize);
         g2d.setStroke(new BasicStroke(1));
         
-        // Key letter
-        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        // Ability name (shortened for display)
+        g2d.setFont(new Font("Arial", Font.BOLD, 14));
         FontMetrics fm = g2d.getFontMetrics();
         Color textColor = ability.unlocked ? Color.WHITE : new Color(100, 100, 100);
         g2d.setColor(textColor);
+        
+        // Use first letter of ability name
+        String displayText = ability.name.substring(0, 1).toUpperCase();
         g2d.drawString(
-            ability.key,
-            centerX - fm.stringWidth(ability.key) / 2,
+            displayText,
+            centerX - fm.stringWidth(displayText) / 2,
             centerY + fm.getAscent() / 2 - 2
         );
         

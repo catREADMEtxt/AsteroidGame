@@ -1,6 +1,5 @@
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
@@ -38,14 +37,13 @@ public class ParticleSystem {
         
         void draw(Graphics2D g2d) {
             float alpha = (float) lifetime / maxLifetime;
-            Color drawColor = new Color(
-                color.getRed(),
-                color.getGreen(),
-                color.getBlue(),
-                (int) (color.getAlpha() * alpha)
-            );
-            g2d.setColor(drawColor);
-            g2d.fillOval((int) x - size / 2, (int) y - size / 2, size, size);
+            Composite old = g2d.getComposite();
+            g2d.setComposite(AlphaComposite.SrcOver.derive(alpha));
+
+            g2d.setColor(color);                 // base RGB (alpha can be 255)
+            g2d.fillOval((int) x - size/2, (int) y - size/2, size, size);
+
+            g2d.setComposite(old);
         }
     }
     
@@ -121,14 +119,15 @@ public class ParticleSystem {
     }
     
     public void update() {
-        Iterator<Particle> it = particles.iterator();
-        while (it.hasNext()) {
-            Particle p = it.next();
+        int write = 0;
+        for (int read = 0; read < particles.size(); read++) {
+            Particle p = particles.get(read);
             p.update();
-            if (!p.isAlive()) {
-                it.remove();
+            if (p.isAlive()) {
+                particles.set(write++, p);
             }
         }
+        particles.subList(write, particles.size()).clear();
     }
     
     public void draw(Graphics2D g2d) {

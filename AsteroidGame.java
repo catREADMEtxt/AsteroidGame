@@ -12,15 +12,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	// Constants
     private static final int WIDTH = 1200, HEIGHT = 700;
 	
-	// Collision Handling
-	private List<Asteroid> newAsteroids;
-	private List<Asteroid> asteroidsToRemove;
-	private List<VoidLaser> lasersToRemove;
-	private List<Bullet> bulletsToRemove;
-	private List<VoidHazard> voidHazardsToRemove;
-	private List<BlackHole> blackHolesToRemove;
-	private List<CosmicEntity> cosmicEntitiesToRemove;
-	
     // Leveling, Alpha Fades, and Timers
     private int level;
 	private ShipLevel shipLevel;
@@ -45,7 +36,14 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private final List<VoidHazard> voidHazards = new ArrayList<>();
 	private final List<BlackHole> blackHoles = new ArrayList<>();
 	private final List<CosmicEntity> cosmicEntities = new ArrayList<>();
-	
+	// Collision Handling
+	private final List<Asteroid> newAsteroids = new ArrayList<>();
+	private final List<Asteroid> asteroidsToRemove = new ArrayList<>();
+	private final List<VoidLaser> lasersToRemove = new ArrayList<>();
+	private final List<Bullet> bulletsToRemove = new ArrayList<>();
+	private final List<VoidHazard> voidHazardsToRemove = new ArrayList<>();
+	private final List<BlackHole> blackHolesToRemove = new ArrayList<>();
+	private final List<CosmicEntity> cosmicEntitiesToRemove = new ArrayList<>();
 	
 	// ====== UIs ======
 	private final List<Meteor> meteors;
@@ -112,8 +110,15 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	// Control Config
 	private ControlConfig controlConfig;
 	private AbilityLoadout abilityLoadout;
-	private ControlPanel controlPanel;
 	private boolean showingControlPanel = false;
+	private String configuringAction = null;
+	private boolean waitingForKey = false;
+	private int selectedSlot = -1;
+	private int hoveredSlot = -1;
+	private int hoveredAbility = -1;
+	private int hoveredKeyConfig = -1;
+	// Game Stats
+	private final int maxBlackHoles = 3;
 
 
 	public AsteroidGame() {
@@ -177,9 +182,13 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		noSavedGame = true;
 		abilityLoadout = new AbilityLoadout();
 		controlConfig = new ControlConfig();
-		controlPanel = new ControlPanel(abilityLoadout, controlConfig);
-		controlPanel.setBounds(0, 0, WIDTH, HEIGHT);
 		showingControlPanel = false;
+		configuringAction = null;
+		waitingForKey = false;
+		selectedSlot = -1;
+		hoveredSlot = -1;
+		hoveredAbility = -1;
+		hoveredKeyConfig = -1;
 	}
 
     void setupMenu() {
@@ -223,16 +232,10 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				if (mx >= WIDTH/2 - 100 && mx <= WIDTH/2 + 100 &&
 					my >= HEIGHT/2 + 190 && my <= HEIGHT/2 + 230) {
 					showingControlPanel = !showingControlPanel;
-					if (showingControlPanel) {
-						add(controlPanel);
-						controlPanel.requestFocusInWindow();
-					} else {
-						remove(controlPanel);
-						requestFocusInWindow();
-					}
-					revalidate();
-					repaint();
 				}
+				// Control panel interactions
+				if (showingControlPanel) handleControlPanelClick(mx, my);
+				repaint();
 			}
 			
 		});
@@ -245,6 +248,11 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				int mx = e.getX();
 				int my = e.getY();
 				
+				if (showingControlPanel) {
+					handleControlPanelMouseMove(mx, my);
+					return;
+				}
+
 				// Check if hovering over any button
 				hoveredButton = -1;
 				if (mx >= WIDTH/2 - 100 && mx <= WIDTH/2 + 100 && 
@@ -282,325 +290,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	    revalidate();
 	    repaint();
 	    requestFocusInWindow();
-	}
-	
-	private void drawMenuButton(Graphics2D g2, String text, int y, boolean hovered, boolean enabled) {
-		int buttonWidth = 200;
-		int buttonHeight = 40;
-		int buttonX = WIDTH / 2 - buttonWidth / 2;
-		
-		// Button background with glow when hovered
-		if (hovered) {
-			// Outer glow
-			g2.setColor(new Color(100, 150, 255, 80));
-			g2.fillRoundRect(buttonX - 5, y - 5, buttonWidth + 10, buttonHeight + 10, 15, 15);
-		}
-		
-		// Main button
-		Color bgColor = enabled ? 
-			(hovered ? new Color(60, 80, 120, 220) : new Color(30, 40, 60, 200)) :
-			new Color(40, 40, 40, 150);
-		g2.setColor(bgColor);
-		g2.fillRoundRect(buttonX, y, buttonWidth, buttonHeight, 10, 10);
-		
-		// Border
-		Color borderColor = enabled ?
-			(hovered ? new Color(120, 180, 255) : new Color(80, 120, 180)) :
-			new Color(80, 80, 80);
-		g2.setColor(borderColor);
-		g2.setStroke(new BasicStroke(2));
-		g2.drawRoundRect(buttonX, y, buttonWidth, buttonHeight, 10, 10);
-		g2.setStroke(new BasicStroke(1));
-		
-		// Text
-		g2.setFont(new Font("Serif", Font.BOLD, 22));
-		FontMetrics fm = g2.getFontMetrics();
-		Color textColor = enabled ?
-			(hovered ? Color.WHITE : new Color(200, 220, 255)) :
-			new Color(120, 120, 120);
-		g2.setColor(textColor);
-		g2.drawString(text, 
-			buttonX + buttonWidth/2 - fm.stringWidth(text)/2,
-			y + buttonHeight/2 + fm.getAscent()/2 - 2);
-	}
-
-	private void drawInstructionsPopup(Graphics2D g2) {
-		// Semi-transparent backdrop
-		g2.setColor(new Color(0, 0, 0, 180));
-		g2.fillRect(0, 0, WIDTH, HEIGHT);
-		
-		// Popup panel
-		int panelWidth = 700;
-		int panelHeight = 550;
-		int panelX = WIDTH / 2 - panelWidth / 2;
-		int panelY = HEIGHT / 2 - panelHeight / 2;
-		int padding = 15;
-		
-		// Panel background
-		g2.setColor(new Color(20, 25, 40, 250));
-		g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
-		
-		// Border
-		g2.setColor(new Color(100, 150, 255, 200));
-		g2.setStroke(new BasicStroke(2));
-		g2.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
-		g2.setStroke(new BasicStroke(1));
-		
-		// Page Title
-		g2.setFont(new Font("Arial", Font.BOLD, 28));
-		g2.setColor(new Color(150, 200, 255));
-		String title;
-		switch (instructionPage) {
-			case 0 -> title = "QUICK START";
-			case 1 -> title = "GAME MECHANICS";
-			case 2 -> title = "ADVANCED TIPS";
-			default -> title = "Unknown";
-		}
-		FontMetrics titleFm = g2.getFontMetrics();
-		g2.drawString(title, panelX + panelWidth/2 - titleFm.stringWidth(title)/2, panelY + padding + titleFm.getAscent());
-		
-		// Page Indicator
-		g2.setFont(new Font("Arial", Font.PLAIN, 14));
-		String pageNum = (instructionPage + 1) + " / " + totalInstructionPages;
-		FontMetrics pageFm = g2.getFontMetrics();
-		g2.setColor(new Color(150, 150, 180));
-		g2.drawString(pageNum, panelX + panelWidth - padding - pageFm.stringWidth(pageNum), panelY + padding + titleFm.getAscent());
-		
-		// Separator
-		g2.setColor(new Color(100, 150, 255, 100));
-		g2.drawLine(panelX + 50, panelY + 60, panelX + panelWidth - 50, panelY + 60);
-		
-		// Content based on page
-		int lineHeight = 25;
-		switch (instructionPage) {
-			case 0 -> drawQuickStartPage(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
-			case 1 -> drawMechanicsPage(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
-			case 2 -> drawAdvancedPage(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
-		}
-		
-		// Navigation arrows
-		g2.setFont(new Font("Arial", Font.BOLD, 16));
-    
-    // Left arrow button
-    if (instructionPage > 0) {
-        int leftBtnX = panelX + 50;
-        int leftBtnY = panelY + panelHeight - 50;
-        int btnWidth = 100;
-        int btnHeight = 35;
-        
-        // Background
-        g2.setColor(new Color(50, 60, 80, 150));
-        g2.fillRoundRect(leftBtnX, leftBtnY, btnWidth, btnHeight, 8, 8);
-        
-        // Border
-        g2.setColor(new Color(100, 150, 255));
-        g2.setStroke(new BasicStroke(1));
-        g2.drawRoundRect(leftBtnX, leftBtnY, btnWidth, btnHeight, 8, 8);
-        
-        // Text
-        g2.setColor(new Color(150, 200, 255));
-        String leftArrow = "◄ PREV";
-        FontMetrics fm = g2.getFontMetrics();
-        g2.drawString(leftArrow, leftBtnX + btnWidth/2 - fm.stringWidth(leftArrow)/2, leftBtnY + 23);
-    }
-    
-    // Right arrow button
-    if (instructionPage < totalInstructionPages - 1) {
-        int rightBtnX = panelX + panelWidth - 150;
-        int rightBtnY = panelY + panelHeight - 50;
-        int btnWidth = 100;
-        int btnHeight = 35;
-        
-        // Background
-        g2.setColor(new Color(50, 60, 80, 150));
-        g2.fillRoundRect(rightBtnX, rightBtnY, btnWidth, btnHeight, 8, 8);
-        
-        // Border
-        g2.setColor(new Color(100, 150, 255));
-        g2.setStroke(new BasicStroke(1));
-        g2.drawRoundRect(rightBtnX, rightBtnY, btnWidth, btnHeight, 8, 8);
-        
-        // Text
-        g2.setColor(new Color(150, 200, 255));
-        String rightArrow = "NEXT ►";
-        FontMetrics fm = g2.getFontMetrics();
-        g2.drawString(rightArrow, rightBtnX + btnWidth/2 - fm.stringWidth(rightArrow)/2, rightBtnY + 23);
-    }
-    
-    g2.setStroke(new BasicStroke(1));  // Reset stroke
-    
-    // Close hint (matching control panel instructions style)
-    g2.setFont(new Font("Arial", Font.PLAIN, 12));
-    g2.setColor(new Color(150, 150, 180));
-    String closeHint = "• Press [I] or [ESC] to close • Use Arrow Keys to navigate";
-    int hintWidth = g2.getFontMetrics().stringWidth(closeHint);
-    g2.drawString(closeHint, panelX + panelWidth/2 - hintWidth/2, panelY + panelHeight - 15);
-	}
-
-	private void drawQuickStartPage(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
-		int textY = panelY + 85;
-		int textX = panelX + 80;
-		
-		// Movement Instructions
-		g2.setFont(new Font("Arial", Font.BOLD, 14));
-		g2.setColor(new Color(255, 200, 100));
-		g2.drawString("MOVEMENT:", textX, textY);
-		textY += lineHeight;
-		
-		String[][] movementControlDisplay = {
-			{controlConfig.getKeyName(controlConfig.getKey("thrust")), "Thrust"},
-			{controlConfig.getKeyName(controlConfig.getKey("left")) + " " + controlConfig.getKeyName(controlConfig.getKey("right")), "Rotate"},
-			{controlConfig.getKeyName(controlConfig.getKey("hyper")), "Hyper Mode"},
-			{controlConfig.getKeyName(controlConfig.getKey("shoot")), "Fire Weapon"}
-		};
-		
-		g2.setFont(new Font("Arial", Font.PLAIN, 13));
-		for (String[] line : movementControlDisplay) {
-			g2.setColor(new Color(100, 255, 150));
-			g2.drawString(line[0], textX, textY);
-			g2.setColor(new Color(200, 200, 240));
-			g2.drawString(line[1], textX + 100, textY);
-			textY += lineHeight;
-		}
-		
-		// Shortcuts
-		String[][] shortcutDisplay = {
-			{"I", "Show/Hide instructions"},
-			{"C", "Open Control Panel"},
-			{"ENTER", "Start game / Return to menu"},
-			{"ESC", "Exit Popups & Pause and Save Game"}
-		};
-		g2.setFont(new Font("Arial", Font.BOLD, 14));
-		g2.setColor(new Color(255, 200, 100));
-		g2.drawString("SHORTCUTS:", textX, textY);
-		textY += lineHeight;
-		
-		g2.setFont(new Font("Arial", Font.PLAIN, 13));
-		for (String[] line : shortcutDisplay) {
-			g2.setColor(new Color(100, 255, 150));
-			g2.drawString(line[0], textX, textY);
-			g2.setColor(new Color(200, 200, 240));
-			g2.drawString(line[1], textX + 100, textY);
-			textY += lineHeight;
-		}
-		
-		// ALL Abilities with current keys
-		String[][] allAbilities = {
-			{controlConfig.getKeyName(controlConfig.getKey("ability1")), 
-			abilityLoadout.getSlot(0) + " (Slot 1)"},
-			{controlConfig.getKeyName(controlConfig.getKey("ability2")), 
-			abilityLoadout.getSlot(1) + " (Slot 2)"},
-			{controlConfig.getKeyName(controlConfig.getKey("ability3")), 
-			abilityLoadout.getSlot(2) + " (Slot 3)"},
-			{controlConfig.getKeyName(controlConfig.getKey("ability4")), 
-			abilityLoadout.getSlot(3) + " (Slot 4)"}
-		};
-		
-		g2.setFont(new Font("Arial", Font.BOLD, 14));
-		g2.setColor(new Color(255, 200, 100));
-		g2.drawString("EQUIPPED ABILITIES:", textX, textY);
-		textY += lineHeight;
-		
-		g2.setFont(new Font("Arial", Font.PLAIN, 13));
-		for (String[] line : allAbilities) {
-			g2.setColor(new Color(100, 255, 150));
-			g2.drawString(line[0], textX, textY);
-			g2.setColor(new Color(200, 200, 240));
-			g2.drawString(line[1], textX + 100, textY);
-			textY += lineHeight;
-		}
-	}
-
-	private void drawMechanicsPage(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
-		g2.setFont(new Font("Arial", Font.PLAIN, 14));
-		int textY = panelY + 100;
-		
-		String[] mechanics = {
-			"VOID DIMENSION (D) - Unlocks at Level 3",
-			"  • Enter a parallel dimension where asteroids are ghostly",
-			"  • Absorb void energy while inside",
-			"  • If void energy reaches 100, you DIE instantly",
-			"  • Void hazards spawn inside - they're harmless outside",
-			"",
-			"FADE MODE (F) - Unlocks at Level 5",
-			"  • Become invulnerable for 5 seconds",
-			"  • Drains void energy faster than normal",
-			"  • Cannot fire weapons while faded",
-			"",
-			"TELEPORT (T) - Unlocks at Level 7",
-			"  • Press once to place an anchor",
-			"  • Press again to teleport back to anchor",
-			"  • Anchor expires after 10 seconds"
-		};
-		
-		for (String line : mechanics) {
-			if (line.isEmpty()) {
-				textY += lineHeight / 2;
-				continue;
-			}
-			
-			if (line.contains("Unlocks")) {
-				g2.setColor(new Color(255, 200, 100));
-				g2.setFont(new Font("Arial", Font.BOLD, 14));
-			} else if (line.startsWith("  ")) {
-				g2.setColor(new Color(200, 200, 220));
-				g2.setFont(new Font("Arial", Font.PLAIN, 13));
-			} else {
-				g2.setColor(new Color(220, 220, 240));
-				g2.setFont(new Font("Arial", Font.PLAIN, 14));
-			}
-			
-			g2.drawString(line, panelX + 60, textY);
-			textY += lineHeight;
-		}
-	}
-
-	private void drawAdvancedPage(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
-		g2.setFont(new Font("Arial", Font.PLAIN, 14));
-		int textY = panelY + 100;
-		
-		String[] advanced = {
-			"ADVANCED ABILITIES",
-			"",
-			"SHIELD BURST (Q) - Level 9",
-			"  • Destroys all nearby asteroids in expanding wave",
-			"  • Grants temporary invulnerability",
-			"",
-			"TIME SLOW (R) - Level 12",
-			"  • Slows everything except your ship to 30% speed",
-			"  • Duration: 5 seconds",
-			"",
-			"COMBAT DRONE (E) - Level 15",
-			"  • Deploys auto-firing companion that orbits ship",
-			"  • Automatically targets nearest asteroid",
-			"  • Has 3 HP - destroyed if hit 3 times",
-			"",
-			"NOVA BLAST (X) - Level 20 ULTIMATE",
-			"  • Requires 75+ void energy to activate",
-			"  • Clears entire screen after 1 second charge",
-			"  • Consumes all void energy"
-		};
-		
-		for (String line : advanced) {
-			if (line.isEmpty()) {
-				textY += lineHeight / 2;
-				continue;
-			}
-			
-			if (line.contains("Level") || line.equals("ADVANCED ABILITIES")) {
-				g2.setColor(new Color(255, 200, 100));
-				g2.setFont(new Font("Arial", Font.BOLD, 14));
-			} else if (line.startsWith("  ")) {
-				g2.setColor(new Color(200, 200, 220));
-				g2.setFont(new Font("Arial", Font.PLAIN, 13));
-			} else {
-				g2.setColor(new Color(220, 220, 240));
-				g2.setFont(new Font("Arial", Font.PLAIN, 14));
-			}
-			
-			g2.drawString(line, panelX + 60, textY);
-			textY += lineHeight;
-		}
 	}
 
     void resumeGame() {
@@ -680,6 +369,103 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	    //asteroids.clear();
 	}	
     
+	private void handleControlPanelClick(int mx, int my) {
+		// Check ability slot clicks
+		for (int i = 0; i < 4; i++) {
+			Rectangle slotBounds = getControlPanelSlotBounds(i);
+			if (slotBounds.contains(mx, my)) {
+				selectedSlot = i;
+				repaint();
+				return;
+			}
+		}
+		
+		// Check available ability clicks
+		if (selectedSlot != -1) {
+			String[] allAbilities = abilityLoadout.getAllAbilities();
+			for (int i = 0; i < allAbilities.length; i++) {
+				Rectangle abilityBounds = getControlPanelAvailableAbilityBounds(i);
+				if (abilityBounds.contains(mx, my)) {
+					abilityLoadout.setSlot(selectedSlot, allAbilities[i]);
+					selectedSlot = -1;
+					repaint();
+					return;
+				}
+			}
+		}
+		
+		// Check control key clicks
+		String[] actions = {"ability1", "ability2", "ability3", "ability4", "shoot", "thrust", "left", "right", "hyper"};
+		for (int i = 0; i < actions.length; i++) {
+			Rectangle keyBounds = getControlPanelKeyConfigBounds(i);
+			if (keyBounds.contains(mx, my)) {
+				configuringAction = actions[i];
+				waitingForKey = true;
+				repaint();
+				return;
+			}
+		}
+		
+		// Deselect if clicking elsewhere
+		selectedSlot = -1;
+		repaint();
+	}
+
+	private void handleControlPanelMouseMove(int mx, int my) {
+		int oldHoveredSlot = hoveredSlot;
+		hoveredSlot = -1;
+		for (int i = 0; i < 4; i++) {
+			if (getControlPanelSlotBounds(i).contains(mx, my)) {
+				hoveredSlot = i;
+				break;
+			}
+		}
+		
+		int oldHoveredAbility = hoveredAbility;
+		hoveredAbility = -1;
+		String[] allAbilities = abilityLoadout.getAllAbilities();
+		for (int i = 0; i < allAbilities.length; i++) {
+			if (getControlPanelAvailableAbilityBounds(i).contains(mx, my)) {
+				hoveredAbility = i;
+				break;
+			}
+		}
+		
+		int oldHoveredKeyConfig = hoveredKeyConfig;
+		hoveredKeyConfig = -1;
+		String[] actions = {"ability1", "ability2", "ability3", "ability4", "shoot", "thrust", "left", "right", "hyper"};
+		for (int i = 0; i < actions.length; i++) {
+			if (getControlPanelKeyConfigBounds(i).contains(mx, my)) {
+				hoveredKeyConfig = i;
+				break;
+			}
+		}
+		
+		if (oldHoveredSlot != hoveredSlot || oldHoveredAbility != hoveredAbility || oldHoveredKeyConfig != hoveredKeyConfig) {
+			repaint();
+		}
+	}
+
+	private void handleControlPanelKeyPress(int keyCode) {
+		if (keyCode == KeyEvent.VK_ESCAPE || keyCode == KeyEvent.VK_ENTER) {
+			waitingForKey = false;
+			configuringAction = null;
+			repaint();
+			return;
+		}
+		
+		if (controlConfig.setControl(configuringAction, keyCode)) {
+			waitingForKey = false;
+			configuringAction = null;
+			repaint();
+		} else {
+			// Key already in use
+			waitingForKey = false;
+			configuringAction = null;
+			repaint();
+		}
+	}
+
 	@Override
 	public void actionPerformed(ActionEvent e) {
         switch (gameState) {
@@ -699,7 +485,74 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 }
             }
             case "playing" -> {
-                // Update fade timer
+                // Decrement the level timer every tick (frame)
+                if (levelStarting) {
+                    levelStartCountdown--;
+					levelDisplayAlpha = (int) (255 * ((float)levelStartCountdown / 180));
+                    if (levelDisplayAlpha <= 0) levelDisplayAlpha = 255;
+                    if (levelStartCountdown <= 0) {
+                        levelStarting = false;
+                        level++;
+                        levelStartCountdown = 3 * 60;
+                        // Generate more asteroids than before
+                        for (int i = 0; i < level + 2; i++) {
+                            Asteroid newAsteroid = Asteroid.randomAsteroid(WIDTH, HEIGHT);
+							if (level > 3 && level < 10) { newAsteroid.setMultiplier(level * 0.5); }
+							asteroids.add(newAsteroid);
+                        }
+
+						// Clear & Respawn Black Holes
+						blackHoles.clear();
+
+						// Spawn Black Holes at level 5+
+						// if (level >= 5) {
+						if (level >= 0) {
+							// Number of black holes increases with level, capped at maxBlackHoles
+							// int numBlackHoles = Math.min((level - 4) / 3 + 1, maxBlackHoles);
+							int numBlackHoles = Math.min(1, maxBlackHoles);
+							
+							for (int i = 0; i < numBlackHoles; i++) {
+								// Random position avoiding edges
+								double bx = 150 + rand.nextDouble() * (WIDTH - 300);
+								double by = 150 + rand.nextDouble() * (HEIGHT - 300);
+								
+								// Random size based on level (60-100)
+								int bhSize = 60 + rand.nextInt(20) + Math.min(level, 10) * 2;
+								
+								blackHoles.add(new BlackHole(bx, by, bhSize));
+							}
+						}
+
+						// Introduce First Cosmic Entity at level 10
+						if (level == 1) {
+    						cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
+						}
+                        
+						// Multiple Threats at level 10+
+						if (level >= 10) {
+							if (level % 3 == 0) {
+								double bx = rand.nextDouble() * WIDTH;
+								double by = rand.nextDouble() * HEIGHT;
+							}
+							if (level % 4 == 0) {
+								cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
+							}
+						}
+                    } else {
+						if (rand.nextInt(100) < level) {  // increase spawn rate with level
+							asteroids.add(Asteroid.randomAsteroid(WIDTH, HEIGHT));
+						}
+						// Now countdown level timer after start countdown finished
+						if (levelTimer > 0) {
+							levelTimer--;
+						} else {
+							levelTimer = 30 * 60;  // reset 30 second countdown for next level
+							// Show level text for 3 seconds (180 frames)
+							levelStarting = true;
+						}
+					}
+				}
+				// Update fade timer
 				if (fadeActive) {
 					fadeTimer--;
 					if (fadeTimer <= 0) {
@@ -822,62 +675,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 }
                 // Deactivate void mode if energy depleted
                 if (ship.getVoidEnergy().getEnergy() <= 0) { abilityManager.setVoidActive(false); }
-                
-                // Decrement the level timer every tick (frame)
-                if (levelStarting) {
-                    levelStartCountdown--;
-                    if (levelStartCountdown <= 0) {
-                        levelStarting = false;
-                        level++;
-                        levelStartCountdown = 3 * 60;
-                        // Generate more asteroids than before
-                        for (int i = 0; i < level + 2; i++) {
-                            Asteroid newAsteroid = Asteroid.randomAsteroid(WIDTH, HEIGHT);
-							if (level > 3 && level < 10) { newAsteroid.setMultiplier(level * 0.5); }
-							asteroids.add(newAsteroid);
-                        }
 
-						// Introduce First Black Holes at level 5
-						if (level == 1) {
-    						blackHoles.add(new BlackHole(WIDTH * 0.3, HEIGHT * 0.5));
-						}
-
-						// Introduce First Cosmic Entity at level 10
-						if (level == 1) {
-    						cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
-						}
-                        
-						// Multiple Threats at level 10+
-						if (level >= 10) {
-							if (level % 3 == 0) {
-								double bx = rand.nextDouble() * WIDTH;
-								double by = rand.nextDouble() * HEIGHT;
-								blackHoles.add(new BlackHole(bx, by));
-							}
-							if (level % 4 == 0) {
-								cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
-							}
-						}
-                    }
-                    levelDisplayAlpha = (int) (255 * ((float)levelStartCountdown / 180));
-                    if (levelDisplayAlpha <= 0) {
-                        levelDisplayAlpha = 255;
-                    }
-                    //bullets.clear();
-                    //asteroids.clear();
-                } else {
-                    if (rand.nextInt(100) < level) {  // increase spawn rate with level
-                        asteroids.add(Asteroid.randomAsteroid(WIDTH, HEIGHT));
-                    }
-                    // Now countdown level timer after start countdown finished
-                    if (levelTimer > 0) {
-                        levelTimer--;
-                    } else {
-                        levelTimer = 30 * 60;  // reset 30 second countdown for next level
-                        // Show level text for 3 seconds (180 frames)
-                        levelStarting = true;
-                    }
-                }
                 // Thrust & Rotation
                 if (thrusting) ship.applyThrust();
                 if (rotatingLeft) ship.rotateLeft();
@@ -961,20 +759,28 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				}
 
 				// ====== Collisions & Physics ======
-				asteroidsToRemove = new ArrayList<>();
-                newAsteroids = new ArrayList<>();
-                lasersToRemove = new ArrayList<>(); 
-                bulletsToRemove = new ArrayList<>();
-                voidHazardsToRemove = new ArrayList<>();
-                blackHolesToRemove = new ArrayList<>();
-                cosmicEntitiesToRemove = new ArrayList<>();
+				asteroidsToRemove.clear();
+                newAsteroids.clear();
+                lasersToRemove.clear(); 
+                bulletsToRemove.clear();
+                voidHazardsToRemove.clear();
+                blackHolesToRemove.clear();
+                cosmicEntitiesToRemove.clear();
 				// ------ Asteroid Physics & Collision with Ship ------
 				for (Asteroid asteroid : asteroids) {
 					asteroid.update();
-					if (!fadeActive && !ship.getVoidEnergy().isActive() && asteroid.intersects(ship.getBounds())) {
-						asteroidDeath = true;
-						startDeathSequence();
-						return;
+					if (!fadeActive && !ship.getVoidEnergy().isActive()) {
+						Rectangle aBounds = asteroid.getBounds().getBounds();
+						double quickDist = Math.abs(aBounds.getCenterX() - ship.getX()) 
+										+ Math.abs(aBounds.getCenterY() - ship.getY());
+						
+						if (quickDist < 100) { // Only do precise check if nearby
+							if (asteroid.intersects(ship.getBounds())) {
+								asteroidDeath = true;
+								startDeathSequence();
+								return;
+							}
+						}
 					}
 					// Drone hit by Asteroid
 					Polygon droneBounds = abilityManager.getDroneBounds(ship.getX(), ship.getY());
@@ -1126,7 +932,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 
 								// Show XP gain near ship
 								floatingTextManager.add(FloatingTextManager.createXP(xpGain, ship.getX() + 30, ship.getY() - 20));
-								
 
 								// Check for level up
 								if (shipLevel.getLevel() > oldLevel) {
@@ -1456,7 +1261,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				// Instructions popup
 				if (showingInstructions) { drawInstructionsPopup(g2); }
 				// Control Panel popup
-				if (showingControlPanel) { controlPanel.paintComponent(g2); }
+				if (showingControlPanel) { drawControlPanelPopup(g2); }
 				
 				// Buttons
 				if (!showingInstructions && !showingControlPanel) {
@@ -1530,7 +1335,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				floatingTextManager.draw(g2);
 
 				// Draw ability bar
-				abilityManager.drawAbilityBar(g2, WIDTH, HEIGHT);
+				abilityManager.drawAbilityBar(g2, WIDTH, HEIGHT, abilityLoadout);
 
 				// Draw level UI
 				shipLevel.drawLevelUI(g2, WIDTH, HEIGHT);
@@ -2179,6 +1984,534 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		g2.setStroke(new BasicStroke(1));
 	}
 
+		private void drawMenuButton(Graphics2D g2, String text, int y, boolean hovered, boolean enabled) {
+		int buttonWidth = 200;
+		int buttonHeight = 40;
+		int buttonX = WIDTH / 2 - buttonWidth / 2;
+		
+		// Button background with glow when hovered
+		if (hovered) {
+			// Outer glow
+			g2.setColor(new Color(100, 150, 255, 80));
+			g2.fillRoundRect(buttonX - 5, y - 5, buttonWidth + 10, buttonHeight + 10, 15, 15);
+		}
+		
+		// Main button
+		Color bgColor = enabled ? 
+			(hovered ? new Color(60, 80, 120, 220) : new Color(30, 40, 60, 200)) :
+			new Color(40, 40, 40, 150);
+		g2.setColor(bgColor);
+		g2.fillRoundRect(buttonX, y, buttonWidth, buttonHeight, 10, 10);
+		
+		// Border
+		Color borderColor = enabled ?
+			(hovered ? new Color(120, 180, 255) : new Color(80, 120, 180)) :
+			new Color(80, 80, 80);
+		g2.setColor(borderColor);
+		g2.setStroke(new BasicStroke(2));
+		g2.drawRoundRect(buttonX, y, buttonWidth, buttonHeight, 10, 10);
+		g2.setStroke(new BasicStroke(1));
+		
+		// Text
+		g2.setFont(new Font("Serif", Font.BOLD, 22));
+		FontMetrics fm = g2.getFontMetrics();
+		Color textColor = enabled ?
+			(hovered ? Color.WHITE : new Color(200, 220, 255)) :
+			new Color(120, 120, 120);
+		g2.setColor(textColor);
+		g2.drawString(text, 
+			buttonX + buttonWidth/2 - fm.stringWidth(text)/2,
+			y + buttonHeight/2 + fm.getAscent()/2 - 2);
+	}
+
+	private void drawInstructionsPopup(Graphics2D g2) {
+		// Semi-transparent backdrop
+		g2.setColor(new Color(0, 0, 0, 180));
+		g2.fillRect(0, 0, WIDTH, HEIGHT);
+		
+		// Popup panel
+		int panelWidth = 700;
+		int panelHeight = 550;
+		int panelX = WIDTH / 2 - panelWidth / 2;
+		int panelY = HEIGHT / 2 - panelHeight / 2;
+		int padding = 15;
+		
+		// Panel background
+		g2.setColor(new Color(20, 25, 40, 250));
+		g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
+		
+		// Border
+		g2.setColor(new Color(100, 150, 255, 200));
+		g2.setStroke(new BasicStroke(2));
+		g2.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
+		g2.setStroke(new BasicStroke(1));
+		
+		// Page Title
+		g2.setFont(new Font("Arial", Font.BOLD, 28));
+		g2.setColor(new Color(150, 200, 255));
+		String title;
+		switch (instructionPage) {
+			case 0 -> title = "QUICK START";
+			case 1 -> title = "GAME MECHANICS";
+			case 2 -> title = "ADVANCED TIPS";
+			default -> title = "Unknown";
+		}
+		FontMetrics titleFm = g2.getFontMetrics();
+		g2.drawString(title, panelX + panelWidth/2 - titleFm.stringWidth(title)/2, panelY + padding + titleFm.getAscent());
+		
+		// Page Indicator
+		g2.setFont(new Font("Arial", Font.PLAIN, 14));
+		String pageNum = (instructionPage + 1) + " / " + totalInstructionPages;
+		FontMetrics pageFm = g2.getFontMetrics();
+		g2.setColor(new Color(150, 150, 180));
+		g2.drawString(pageNum, panelX + panelWidth - padding - pageFm.stringWidth(pageNum), panelY + padding + titleFm.getAscent());
+		
+		// Separator
+		g2.setColor(new Color(100, 150, 255, 100));
+		g2.drawLine(panelX + 50, panelY + 60, panelX + panelWidth - 50, panelY + 60);
+		
+		// Content based on page
+		int lineHeight = 25;
+		switch (instructionPage) {
+			case 0 -> drawPageOne(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
+			case 1 -> drawPageTwo(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
+			case 2 -> drawPageThree(g2, panelX, panelY, panelWidth, panelHeight, lineHeight);
+		}
+		
+		// Navigation arrows
+		g2.setFont(new Font("Arial", Font.BOLD, 16));
+    
+		// Left arrow button
+		if (instructionPage > 0) {
+			int leftBtnX = panelX + 50;
+			int leftBtnY = panelY + panelHeight - 50;
+			int btnWidth = 100;
+			int btnHeight = 35;
+			
+			// Background
+			g2.setColor(new Color(50, 60, 80, 150));
+			g2.fillRoundRect(leftBtnX, leftBtnY, btnWidth, btnHeight, 8, 8);
+			
+			// Border
+			g2.setColor(new Color(100, 150, 255));
+			g2.setStroke(new BasicStroke(1));
+			g2.drawRoundRect(leftBtnX, leftBtnY, btnWidth, btnHeight, 8, 8);
+			
+			// Text
+			g2.setColor(new Color(150, 200, 255));
+			String leftArrow = "◄ PREV";
+			FontMetrics fm = g2.getFontMetrics();
+			g2.drawString(leftArrow, leftBtnX + btnWidth/2 - fm.stringWidth(leftArrow)/2, leftBtnY + 23);
+		}
+		
+		// Right arrow button
+		if (instructionPage < totalInstructionPages - 1) {
+			int rightBtnX = panelX + panelWidth - 150;
+			int rightBtnY = panelY + panelHeight - 50;
+			int btnWidth = 100;
+			int btnHeight = 35;
+			
+			// Background
+			g2.setColor(new Color(50, 60, 80, 150));
+			g2.fillRoundRect(rightBtnX, rightBtnY, btnWidth, btnHeight, 8, 8);
+			
+			// Border
+			g2.setColor(new Color(100, 150, 255));
+			g2.setStroke(new BasicStroke(1));
+			g2.drawRoundRect(rightBtnX, rightBtnY, btnWidth, btnHeight, 8, 8);
+			
+			// Text
+			g2.setColor(new Color(150, 200, 255));
+			String rightArrow = "NEXT ►";
+			FontMetrics fm = g2.getFontMetrics();
+			g2.drawString(rightArrow, rightBtnX + btnWidth/2 - fm.stringWidth(rightArrow)/2, rightBtnY + 23);
+		}
+		
+		g2.setStroke(new BasicStroke(1));  // Reset stroke
+		
+		// Close hint (matching control panel instructions style)
+		g2.setFont(new Font("Arial", Font.PLAIN, 12));
+		g2.setColor(new Color(150, 150, 180));
+		String closeHint = "• Press [I] or [ESC] to close • Use Arrow Keys to navigate";
+		int hintWidth = g2.getFontMetrics().stringWidth(closeHint);
+		g2.drawString(closeHint, panelX + panelWidth/2 - hintWidth/2, panelY + panelHeight - 15);
+	}
+
+	private void drawPageOne(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
+		int textY = panelY + 85;
+		int textX = panelX + 80;
+		
+		// Movement Instructions
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("MOVEMENT:", textX, textY);
+		textY += lineHeight;
+		
+		String[][] movementControlDisplay = {
+			{controlConfig.getKeyName(controlConfig.getKey("thrust")), "Thrust"},
+			{controlConfig.getKeyName(controlConfig.getKey("left")) + " " + controlConfig.getKeyName(controlConfig.getKey("right")), "Rotate"},
+			{controlConfig.getKeyName(controlConfig.getKey("hyper")), "Hyper Mode"},
+			{controlConfig.getKeyName(controlConfig.getKey("shoot")), "Fire Weapon"}
+		};
+		
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));
+		for (String[] line : movementControlDisplay) {
+			g2.setColor(new Color(100, 255, 150));
+			g2.drawString(line[0], textX, textY);
+			g2.setColor(new Color(200, 200, 240));
+			g2.drawString(line[1], textX + 100, textY);
+			textY += lineHeight;
+		}
+		
+		// Shortcuts
+		String[][] shortcutDisplay = {
+			{"I", "Show/Hide instructions"},
+			{"C", "Open Control Panel"},
+			{"ENTER", "Start game / Return to menu"},
+			{"ESC", "Exit Popups & Pause and Save Game"}
+		};
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("SHORTCUTS:", textX, textY);
+		textY += lineHeight;
+		
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));
+		for (String[] line : shortcutDisplay) {
+			g2.setColor(new Color(100, 255, 150));
+			g2.drawString(line[0], textX, textY);
+			g2.setColor(new Color(200, 200, 240));
+			g2.drawString(line[1], textX + 100, textY);
+			textY += lineHeight;
+		}
+		
+		// ALL Abilities with current keys
+		String[][] allAbilities = {
+			{controlConfig.getKeyName(controlConfig.getKey("ability1")), 
+			abilityLoadout.getSlot(0) + " (Slot 1)"},
+			{controlConfig.getKeyName(controlConfig.getKey("ability2")), 
+			abilityLoadout.getSlot(1) + " (Slot 2)"},
+			{controlConfig.getKeyName(controlConfig.getKey("ability3")), 
+			abilityLoadout.getSlot(2) + " (Slot 3)"},
+			{controlConfig.getKeyName(controlConfig.getKey("ability4")), 
+			abilityLoadout.getSlot(3) + " (Slot 4)"}
+		};
+		
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("EQUIPPED ABILITIES:", textX, textY);
+		textY += lineHeight;
+		
+		g2.setFont(new Font("Arial", Font.PLAIN, 13));
+		for (String[] line : allAbilities) {
+			g2.setColor(new Color(100, 255, 150));
+			g2.drawString(line[0], textX, textY);
+			g2.setColor(new Color(200, 200, 240));
+			g2.drawString(line[1], textX + 100, textY);
+			textY += lineHeight;
+		}
+	}
+
+	private void drawPageTwo(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
+		g2.setFont(new Font("Arial", Font.PLAIN, 14));
+		int textY = panelY + 100;
+		
+		String[] mechanics = {
+			"VOID DIMENSION (D) - Unlocks at Level 3",
+			"  • Enter a parallel dimension where asteroids are ghostly",
+			"  • Absorb void energy while inside",
+			"  • If void energy reaches 100, you DIE instantly",
+			"  • Void hazards spawn inside - they're harmless outside",
+			"",
+			"FADE MODE (F) - Unlocks at Level 5",
+			"  • Become invulnerable for 5 seconds",
+			"  • Drains void energy faster than normal",
+			"  • Cannot fire weapons while faded",
+			"",
+			"TELEPORT (T) - Unlocks at Level 7",
+			"  • Press once to place an anchor",
+			"  • Press again to teleport back to anchor",
+			"  • Anchor expires after 10 seconds"
+		};
+		
+		for (String line : mechanics) {
+			if (line.isEmpty()) {
+				textY += lineHeight / 2;
+				continue;
+			}
+			
+			if (line.contains("Unlocks")) {
+				g2.setColor(new Color(255, 200, 100));
+				g2.setFont(new Font("Arial", Font.BOLD, 14));
+			} else if (line.startsWith("  ")) {
+				g2.setColor(new Color(200, 200, 220));
+				g2.setFont(new Font("Arial", Font.PLAIN, 13));
+			} else {
+				g2.setColor(new Color(220, 220, 240));
+				g2.setFont(new Font("Arial", Font.PLAIN, 14));
+			}
+			
+			g2.drawString(line, panelX + 60, textY);
+			textY += lineHeight;
+		}
+	}
+
+	private void drawPageThree(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight, int lineHeight) {
+		g2.setFont(new Font("Arial", Font.PLAIN, 14));
+		int textY = panelY + 100;
+		
+		String[] advanced = {
+			"ADVANCED ABILITIES",
+			"",
+			"SHIELD BURST (Q) - Level 9",
+			"  • Destroys all nearby asteroids in expanding wave",
+			"  • Grants temporary invulnerability",
+			"",
+			"TIME SLOW (R) - Level 12",
+			"  • Slows everything except your ship to 30% speed",
+			"  • Duration: 5 seconds",
+			"",
+			"COMBAT DRONE (E) - Level 15",
+			"  • Deploys auto-firing companion that orbits ship",
+			"  • Automatically targets nearest asteroid",
+			"  • Has 3 HP - destroyed if hit 3 times",
+			"",
+			"NOVA BLAST (X) - Level 20 ULTIMATE",
+			"  • Requires 75+ void energy to activate",
+			"  • Clears entire screen after 1 second charge",
+			"  • Consumes all void energy"
+		};
+		
+		for (String line : advanced) {
+			if (line.isEmpty()) {
+				textY += lineHeight / 2;
+				continue;
+			}
+			
+			if (line.contains("Level") || line.equals("ADVANCED ABILITIES")) {
+				g2.setColor(new Color(255, 200, 100));
+				g2.setFont(new Font("Arial", Font.BOLD, 14));
+			} else if (line.startsWith("  ")) {
+				g2.setColor(new Color(200, 200, 220));
+				g2.setFont(new Font("Arial", Font.PLAIN, 13));
+			} else {
+				g2.setColor(new Color(220, 220, 240));
+				g2.setFont(new Font("Arial", Font.PLAIN, 14));
+			}
+			
+			g2.drawString(line, panelX + 60, textY);
+			textY += lineHeight;
+		}
+	}
+
+	private void drawControlPanelPopup(Graphics2D g2) {
+		// Semi-transparent backdrop
+		g2.setColor(new Color(0, 0, 0, 180));
+		g2.fillRect(0, 0, WIDTH, HEIGHT);
+		
+		// Main panel
+		int panelWidth = 700;
+		int panelHeight = 550;
+		int panelX = WIDTH / 2 - panelWidth / 2;
+		int panelY = HEIGHT / 2 - panelHeight / 2;
+		
+		// Panel background
+		g2.setColor(new Color(20, 25, 40, 250));
+		g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
+		
+		// Border
+		g2.setColor(new Color(100, 150, 255, 200));
+		g2.setStroke(new BasicStroke(2));
+		g2.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
+		g2.setStroke(new BasicStroke(1));
+		
+		// Title
+		g2.setFont(new Font("Arial", Font.BOLD, 28));
+		g2.setColor(new Color(150, 200, 255));
+		String title = "CONTROL CONFIGURATION";
+		FontMetrics titleFm = g2.getFontMetrics();
+		g2.drawString(title, panelX + panelWidth/2 - titleFm.stringWidth(title)/2, panelY + 40);
+		
+		// Separator
+		g2.setColor(new Color(100, 150, 255, 100));
+		g2.drawLine(panelX + 50, panelY + 60, panelX + panelWidth - 50, panelY + 60);
+		
+		// Draw sections
+		drawControlPanelAbilitySlots(g2, panelX, panelY);
+		drawControlPanelAvailableAbilities(g2, panelX, panelY);
+		drawControlPanelKeyConfiguration(g2, panelX, panelY);
+		drawControlPanelInstructions(g2, panelX, panelY, panelWidth, panelHeight);
+	}
+
+	private void drawControlPanelAbilitySlots(Graphics2D g2, int panelX, int panelY) {
+		g2.setFont(new Font("Arial", Font.BOLD, 16));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("EQUIPPED ABILITIES", panelX + 50, panelY + 90);
+		
+		for (int i = 0; i < 4; i++) {
+			Rectangle bounds = getControlPanelSlotBounds(i);
+			String ability = abilityLoadout.getSlot(i);
+			String key = controlConfig.getKeyName(controlConfig.getKey("ability" + (i + 1)));
+			
+			boolean isSelected = (i == selectedSlot);
+			boolean isHovered = (i == hoveredSlot);
+			
+			if (isSelected) {
+				g2.setColor(new Color(100, 150, 255, 150));
+			} else if (isHovered) {
+				g2.setColor(new Color(100, 150, 255, 80));
+			} else {
+				g2.setColor(ability != null && !ability.isEmpty() ? new Color(60, 80, 120, 220) : new Color(40, 40, 40, 150));
+			}
+			g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 10, 10);
+			
+			g2.setColor(isSelected ? new Color(150, 200, 255) : new Color(100, 150, 255, 200));
+			g2.setStroke(new BasicStroke(isSelected ? 3 : 2));
+			g2.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 10, 10);
+			g2.setStroke(new BasicStroke(1));
+			
+			g2.setFont(new Font("Arial", Font.BOLD, 14));
+			g2.setColor(new Color(255, 215, 0));
+			g2.drawString("[" + key + "]", bounds.x + 10, bounds.y + 20);
+			
+			g2.setFont(new Font("Arial", Font.PLAIN, 11));
+			g2.setColor(new Color(150, 150, 180));
+			g2.drawString("Slot " + (i + 1), bounds.x + 10, bounds.y + bounds.height - 10);
+			
+			if (ability != null && !ability.isEmpty()) {
+				g2.setFont(new Font("Arial", Font.BOLD, 16));
+				g2.setColor(Color.WHITE);
+				FontMetrics fm = g2.getFontMetrics();
+				String displayName = ability.toUpperCase();
+				g2.drawString(displayName, 
+					bounds.x + bounds.width/2 - fm.stringWidth(displayName)/2, 
+					bounds.y + bounds.height/2 + 5);
+			} else {
+				g2.setFont(new Font("Arial", Font.ITALIC, 12));
+				g2.setColor(new Color(120, 120, 120));
+				String emptyText = "Empty";
+				FontMetrics fm = g2.getFontMetrics();
+				g2.drawString(emptyText, 
+					bounds.x + bounds.width/2 - fm.stringWidth(emptyText)/2, 
+					bounds.y + bounds.height/2 + 5);
+			}
+		}
+		
+		if (selectedSlot != -1) {
+			g2.setFont(new Font("Arial", Font.BOLD, 12));
+			g2.setColor(new Color(255, 215, 0));
+			String hint = "▼ Select an ability below to assign to Slot " + (selectedSlot + 1);
+			g2.drawString(hint, panelX + 50, panelY + 200);
+		}
+	}
+
+	private void drawControlPanelAvailableAbilities(Graphics2D g2, int panelX, int panelY) {
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("AVAILABLE ABILITIES:", panelX + 50, panelY + 210);
+		
+		String[] allAbilities = abilityLoadout.getAllAbilities();
+		for (int i = 0; i < allAbilities.length; i++) {
+			Rectangle bounds = getControlPanelAvailableAbilityBounds(i);
+			boolean isHovered = (i == hoveredAbility && selectedSlot != -1);
+			
+			if (isHovered) {
+				g2.setColor(new Color(100, 150, 255, 80));
+				g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 8, 8);
+			}
+			
+			g2.setColor(new Color(80, 120, 180, 100));
+			g2.setStroke(new BasicStroke(1));
+			g2.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 8, 8);
+			
+			g2.setFont(new Font("Arial", Font.PLAIN, 13));
+			g2.setColor(isHovered ? Color.WHITE : new Color(200, 200, 220));
+			g2.drawString("• " + allAbilities[i].toUpperCase(), bounds.x + 10, bounds.y + 22);
+		}
+	}
+
+	private void drawControlPanelKeyConfiguration(Graphics2D g2, int panelX, int panelY) {
+		g2.setFont(new Font("Arial", Font.BOLD, 14));
+		g2.setColor(new Color(255, 200, 100));
+		g2.drawString("KEY BINDINGS:", panelX + 400, panelY + 210);
+		
+		String[] actions = {"ability1", "ability2", "ability3", "ability4", "shoot", "thrust", "left", "right", "hyper"};
+		String[] labels = {"Ability 1", "Ability 2", "Ability 3", "Ability 4", "Shoot", "Thrust", "Rotate Left", "Rotate Right", "Hyper"};
+		
+		for (int i = 0; i < actions.length; i++) {
+			Rectangle bounds = getControlPanelKeyConfigBounds(i);
+			String action = actions[i];
+			boolean isConfiguring = waitingForKey && action.equals(configuringAction);
+			boolean isHovered = (i == hoveredKeyConfig);
+			
+			g2.setColor(isConfiguring ? new Color(255, 215, 0, 100) : 
+					isHovered ? new Color(80, 100, 130, 200) : new Color(50, 60, 80, 150));
+			g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 8, 8);
+			
+			g2.setColor(isConfiguring ? new Color(255, 215, 0) : new Color(80, 120, 180));
+			g2.setStroke(new BasicStroke(isConfiguring ? 2 : 1));
+			g2.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 8, 8);
+			g2.setStroke(new BasicStroke(1));
+			
+			g2.setFont(new Font("Arial", Font.PLAIN, 12));
+			g2.setColor(new Color(200, 200, 220));
+			g2.drawString(labels[i] + ":", bounds.x + 10, bounds.y + 22);
+			
+			g2.setFont(new Font("Arial", Font.BOLD, 13));
+			String keyName = isConfiguring ? "Press key..." : controlConfig.getKeyName(controlConfig.getKey(action));
+			g2.setColor(isConfiguring ? new Color(255, 215, 0) : new Color(100, 255, 150));
+			FontMetrics fm = g2.getFontMetrics();
+			g2.drawString(keyName, bounds.x + bounds.width - fm.stringWidth(keyName) - 10, bounds.y + 22);
+		}
+	}
+
+	private void drawControlPanelInstructions(Graphics2D g2, int panelX, int panelY, int panelWidth, int panelHeight) {
+		g2.setFont(new Font("Arial", Font.PLAIN, 12));
+		g2.setColor(new Color(150, 150, 180));
+		
+		String[] instructions = {
+			"• Click a slot to select it, then click an ability to assign",
+			"• Click a key binding to rebind it (ESC/ENTER cannot be rebound)",
+			"• Press C or ESC to close"
+		};
+		
+		int y = panelY + panelHeight - 60;
+		for (String instruction : instructions) {
+			g2.drawString(instruction, panelX + 50, y);
+			y += 20;
+		}
+	}
+
+	private Rectangle getControlPanelSlotBounds(int slot) {
+		int panelWidth = 700;
+		int panelX = WIDTH / 2 - panelWidth / 2;
+		int slotWidth = 140;
+		int slotHeight = 80;
+		int slotY = HEIGHT / 2 - 175;
+		int spacing = 20;
+		int startX = panelX + 50;
+		return new Rectangle(startX + slot * (slotWidth + spacing), slotY, slotWidth, slotHeight);
+	}
+
+	private Rectangle getControlPanelAvailableAbilityBounds(int index) {
+		int panelWidth = 700;
+		int panelX = WIDTH / 2 - panelWidth / 2;
+		int itemWidth = 180;
+		int itemHeight = 35;
+		int startY = HEIGHT / 2 - 55;
+		int startX = panelX + 50;
+		return new Rectangle(startX, startY + index * (itemHeight + 5), itemWidth, itemHeight);
+	}
+
+	private Rectangle getControlPanelKeyConfigBounds(int index) {
+		int panelWidth = 700;
+		int panelX = WIDTH / 2 - panelWidth / 2;
+		int itemWidth = 260;
+		int itemHeight = 35;
+		int startY = HEIGHT / 2 - 55;
+		int startX = panelX + 390;
+		return new Rectangle(startX, startY + index * (itemHeight + 5), itemWidth, itemHeight);
+	}
+
 	private void activateAbility(int slot) {
 		String ability = abilityLoadout.getSlot(slot);
 		if (ability == null) return;
@@ -2242,35 +2575,35 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     public void keyPressed(KeyEvent e) {
         switch (gameState) {
             case "menu" -> {
-				switch (e.getKeyCode()) {
-                    case KeyEvent.VK_ENTER -> startNewGame();
-                    case KeyEvent.VK_I -> showingInstructions = !showingInstructions;
+				if (showingControlPanel && waitingForKey && configuringAction != null) {
+					handleControlPanelKeyPress(e.getKeyCode());
+					return;
+				}
+				int key = e.getKeyCode();
+				switch (key) {
+					case KeyEvent.VK_ENTER -> {
+						if (!showingInstructions && !showingControlPanel) startNewGame();
+					}
+                    case KeyEvent.VK_I -> {
+						if (!showingControlPanel && !waitingForKey) showingInstructions = !showingInstructions;
+					}
 					case KeyEvent.VK_C -> {
-						if (showingControlPanel) {
-							showingControlPanel = false;
-							remove(controlPanel);
-							requestFocusInWindow();
-							revalidate();
-							repaint();
-						} else {
-							showingControlPanel = true;
-							add(controlPanel);
-							controlPanel.requestFocusInWindow();
-							revalidate();
-							repaint();
-						}
+						if (!showingInstructions && !waitingForKey) showingControlPanel = !showingControlPanel;
 					}
 					case KeyEvent.VK_ESCAPE -> {
-						if (showingInstructions) {
+						if (showingInstructions && !waitingForKey) {
 							showingInstructions = false;
 							instructionPage = 0;
 						}
-						if (showingControlPanel) {
+						if (showingControlPanel && !waitingForKey) {
 							showingControlPanel = false;
-							remove(controlPanel);
-							requestFocusInWindow();
-							revalidate();
-							repaint();
+							configuringAction = null;
+							waitingForKey = false;
+							selectedSlot = -1;
+						}
+						if (waitingForKey) {
+							configuringAction = null;
+							waitingForKey = false;
 						}
 					}
 					case KeyEvent.VK_LEFT -> {
@@ -2284,10 +2617,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						}
 					}
 					case KeyEvent.VK_S -> {
-						if (noSavedGame) {
-							// No saved game to load
-							break;
-						}
+						if (noSavedGame || showingInstructions || showingControlPanel) break;
 						resumeGame();
 						gameState = "playing";
                 	}
@@ -2311,7 +2641,8 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				}
 			}
             case "paused" -> {
-                switch (e.getKeyCode()) {
+				int key = e.getKeyCode();
+                switch (key) {
                     case KeyEvent.VK_ESCAPE -> gameState = "playing";
 					case KeyEvent.VK_ENTER -> {
 						gameState = "menu";
