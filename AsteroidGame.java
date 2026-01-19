@@ -9,14 +9,67 @@ import javax.swing.*;
 import javax.swing.Timer;
 
 public final class AsteroidGame extends JPanel implements ActionListener, KeyListener {
+	/*
+	static final class SpatialHashGrid<T> {
+		private final int cellSize;
+		private final HashMap<Long, ArrayList<T>> buckets = new HashMap<>();
+
+		SpatialHashGrid(int cellSize) {
+			this.cellSize = cellSize;
+		}
+
+		void clear() {
+			// Reuse bucket lists to avoid allocations
+			for (ArrayList<T> list : buckets.values()) list.clear();
+		}
+
+		private int cell(double v) {
+			return (int)Math.floor(v / cellSize);
+		}
+
+		private long key(int cx, int cy) {
+			return (((long) cx) << 32) ^ (cy & 0xffffffffL);
+		}
+
+		void insert(double x, double y, T obj) {
+			int cx = cell(x), cy = cell(y);
+			long k = key(cx, cy);
+			ArrayList<T> list = buckets.get(k);
+			if (list == null) {
+				list = new ArrayList<>(16);
+				buckets.put(k, list);
+			}
+			list.add(obj);
+		}
+
+		/**
+		 * Adds candidates from the 3x3 neighboring cells to `out`.
+		 * Note: candidates still need an exact radius check in boids.
+		 *
+		void queryNearby(double x, double y, ArrayList<T> out) {
+			out.clear();
+			int cx = cell(x), cy = cell(y);
+			for (int oy = -1; oy <= 1; oy++) {
+				for (int ox = -1; ox <= 1; ox++) {
+					long k = key(cx + ox, cy + oy);
+					ArrayList<T> list = buckets.get(k);
+					if (list != null && !list.isEmpty()) out.addAll(list);
+				}
+			}
+		}
+	}*/
+	
 	// Constants
     private static final int WIDTH = 1200, HEIGHT = 700;
 	
-    // Leveling, Alpha Fades, and Timers
+    // Alpha Fades and Timers
     private int level;
 	private ShipLevel shipLevel;
 	private int levelUpFrame = 0;
 	private boolean showingLevelUp = false;
+	private final Timer timer;
+	private int spawnCreaturesCooldown = 0;
+	private int spawnEntitiesCooldown = 0;
 	private int deathCountdown;
     private int levelStartCountdown;
 	private int levelDisplayAlpha;
@@ -36,14 +89,22 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private final List<VoidHazard> voidHazards = new ArrayList<>();
 	private final List<BlackHole> blackHoles = new ArrayList<>();
 	private final List<CosmicEntity> cosmicEntities = new ArrayList<>();
-	// Collision Handling
-	private final List<Asteroid> newAsteroids = new ArrayList<>();
+	private final List<VoidCreature> voidCreatures = new ArrayList<>();
+	// Collision & Physics Handling
+	private final List<Asteroid> asteroidsToAdd = new ArrayList<>();
+	private final List<VoidHazard> hazardsToAdd = new ArrayList<>();
 	private final List<Asteroid> asteroidsToRemove = new ArrayList<>();
 	private final List<VoidLaser> lasersToRemove = new ArrayList<>();
 	private final List<Bullet> bulletsToRemove = new ArrayList<>();
 	private final List<VoidHazard> voidHazardsToRemove = new ArrayList<>();
 	private final List<BlackHole> blackHolesToRemove = new ArrayList<>();
 	private final List<CosmicEntity> cosmicEntitiesToRemove = new ArrayList<>();
+	private final List<VoidCreature> creaturesToRemove = new ArrayList<>();
+	private final ArrayList<VoidCreature> vcNeighbors = new ArrayList<>(128);
+	private final ArrayList<CosmicEntity> ceNeighbors = new ArrayList<>(128);
+	//private static final int BOIDS_CELL = 150;
+	//private final SpatialHashGrid<VoidCreature> voidCreatureGrid = new SpatialHashGrid<>(BOIDS_CELL);
+	//private final SpatialHashGrid<CosmicEntity> cosmicEntityGrid = new SpatialHashGrid<>(BOIDS_CELL);
 	
 	// ====== UIs ======
 	private final List<Meteor> meteors;
@@ -72,7 +133,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private TeleportAnchor teleportAnchor;
 	private int teleportFlashFrame = 0;
 
-
 	// ====== Reward Systems ======
 	private int xpGain;
 	private int fuelGain;
@@ -90,7 +150,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     private final Random rand = new Random();
     private boolean noSavedGame;
     private Ship ship;
-    private final Timer timer;
     private String gameState = "menu"; // "menu", "playing", "paused", "death"
 	private int hoveredButton;
 	private boolean showingInstructions;
@@ -119,6 +178,10 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private int hoveredKeyConfig = -1;
 	// Game Stats
 	private final int maxBlackHoles = 3;
+	private int targetTotalCreatureSizeValue = 0;
+	private int currentTotalCreatureSizeValue = 0;
+	private int targetTotalEntitySizeValue = 0;
+	private int currentTotalEntitySizeValue = 0;
 
 
 	public AsteroidGame() {
@@ -466,6 +529,53 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		}
 	}
 
+	private void trySpawnCreatures() {
+		if (spawnCreaturesCooldown > 0) { spawnCreaturesCooldown--; return; }
+		if (levelStarting) return;
+		if (currentTotalCreatureSizeValue >= targetTotalCreatureSizeValue) return;
+		/*
+		if (rand.nextBoolean() && level >= 0) {
+			VoidCreature vc = new VoidCreature(WIDTH, HEIGHT, level);
+			voidCreatures.add(vc);
+			currentTotalCreatureSizeValue += vc.getSizeValue();
+		}*/
+		int spawnCount = Math.min(2, (targetTotalCreatureSizeValue - currentTotalCreatureSizeValue) / 2);
+		for (int i = 0; i < spawnCount; i++) {
+			VoidCreature vc = new VoidCreature(WIDTH, HEIGHT, level);
+			voidCreatures.add(vc);
+			currentTotalCreatureSizeValue += vc.getSizeValue();
+		}
+
+		spawnCreaturesCooldown = 60; // cooldown of 60 frames (1 secs) before next spawn
+	}
+
+	private void trySpawnEntities() {
+		if (spawnEntitiesCooldown > 0) { spawnEntitiesCooldown--; return; }
+		if (levelStarting) return;
+		if (currentTotalEntitySizeValue >= targetTotalEntitySizeValue) return;
+
+		/*
+		if (rand.nextBoolean() && level >= 0) {
+			CosmicEntity ce = new CosmicEntity(WIDTH, HEIGHT, level);
+			cosmicEntities.add(ce);
+			currentTotalEntitySizeValue += ce.getSizeValue();
+		}
+		*//*
+		int spawnCount = 1 + rand.nextInt(3);
+		for (int i = 0; i < spawnCount && currentTotalEntitySizeValue < targetTotalEntitySizeValue; i++) {
+			CosmicEntity ce = new CosmicEntity(WIDTH, HEIGHT, level);
+			cosmicEntities.add(ce);
+			currentTotalEntitySizeValue += ce.getSizeValue();
+		}*/
+		int spawnCount = Math.min(2, (targetTotalCreatureSizeValue - currentTotalCreatureSizeValue) / 2);
+		for (int i = 0; i < spawnCount; i++) {
+			CosmicEntity vc = new CosmicEntity(WIDTH, HEIGHT, level);
+			cosmicEntities.add(vc);
+			currentTotalEntitySizeValue += vc.getSizeValue();
+		}
+		spawnEntitiesCooldown = 60; // cooldown of 60 frames (1 sec) before next spawn
+	}
+
 	@Override
 	public void actionPerformed(ActionEvent e) {
         switch (gameState) {
@@ -501,8 +611,17 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 							asteroids.add(newAsteroid);
                         }
 
-						// Clear & Respawn Black Holes
+						// Clear Black Holes, Cosmic Entities, Void Creatures, and Void Hazards
 						blackHoles.clear();
+						cosmicEntities.clear();
+						voidCreatures.clear();
+						voidHazards.clear();
+
+						// Calculate target total size value for this level
+						targetTotalEntitySizeValue = Math.min(3 + level * 3, 40);
+						targetTotalCreatureSizeValue = Math.min(2 + level * 2, 30);
+						currentTotalCreatureSizeValue = 0;
+						currentTotalEntitySizeValue = 0;
 
 						// Spawn Black Holes at level 5+
 						// if (level >= 5) {
@@ -522,36 +641,40 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 								blackHoles.add(new BlackHole(bx, by, bhSize));
 							}
 						}
-
-						// Introduce First Cosmic Entity at level 10
-						if (level == 1) {
-    						cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
-						}
-                        
-						// Multiple Threats at level 10+
-						if (level >= 10) {
-							if (level % 3 == 0) {
-								double bx = rand.nextDouble() * WIDTH;
-								double by = rand.nextDouble() * HEIGHT;
-							}
-							if (level % 4 == 0) {
-								cosmicEntities.add(new CosmicEntity(WIDTH, HEIGHT));
+						// Spawn void hazards 
+						// Chance increases with level, max 10%
+						if (rand.nextInt(150) < Math.min(level, 10)) {
+							int hazardCount = Math.min(level, 5);
+							VoidHazard.Type[] types = VoidHazard.Type.values();
+							for (int i = 0; i < hazardCount; i++) {
+								VoidHazard.Type randomType = types[rand.nextInt(types.length)];
+								voidHazards.add(new VoidHazard(WIDTH, HEIGHT, randomType));
 							}
 						}
-                    } else {
-						if (rand.nextInt(100) < level) {  // increase spawn rate with level
-							asteroids.add(Asteroid.randomAsteroid(WIDTH, HEIGHT));
-						}
-						// Now countdown level timer after start countdown finished
-						if (levelTimer > 0) {
-							levelTimer--;
-						} else {
-							levelTimer = 30 * 60;  // reset 30 second countdown for next level
-							// Show level text for 3 seconds (180 frames)
-							levelStarting = true;
-						}
+                    } 
+				} else {
+					if (rand.nextInt(100) < level) {  // increase spawn rate with level
+						asteroids.add(Asteroid.randomAsteroid(WIDTH, HEIGHT));
+					}
+					// Now countdown level timer after start countdown finished
+					if (levelTimer > 0) {
+						levelTimer--;
+					} else {
+						levelTimer = 30 * 60;  // reset 30 second countdown for next level
+						// Show level text for 3 seconds (180 frames)
+						levelStarting = true;
 					}
 				}
+				// Update level up animation
+				if (showingLevelUp) {
+					levelUpFrame++;
+					if (levelUpFrame >= 60) {
+						showingLevelUp = false;
+						levelUpFrame = 0;
+					}
+				}
+
+				// ====== Ability Effects ======
 				// Update fade timer
 				if (fadeActive) {
 					fadeTimer--;
@@ -599,65 +722,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				// Update teleport flash
 				if (teleportFlashFrame > 0) teleportFlashFrame--;
 
-				// Update level up animation
-				if (showingLevelUp) {
-					levelUpFrame++;
-					if (levelUpFrame >= 60) {
-						showingLevelUp = false;
-						levelUpFrame = 0;
-					}
-				}
-
-				// Spawn void hazards when in void world
-				if (ship.getVoidEnergy().isActive() && rand.nextInt(150) < Math.min(level, 10)) {
-					VoidHazard.Type[] types = VoidHazard.Type.values();
-					VoidHazard.Type randomType = types[rand.nextInt(types.length)];
-					voidHazards.add(new VoidHazard(WIDTH, HEIGHT, randomType));
-				}
-
-				// Update void hazards
-				Iterator<VoidHazard> vhIt = voidHazards.iterator();
-				while (vhIt.hasNext()) {
-					VoidHazard vh = vhIt.next();
-					vh.update();
-					if (!vh.isAlive()) {
-						vhIt.remove();
-					} else if (!fadeActive && vh.intersects(ship.getBounds()) && ship.getVoidEnergy().isActive()) {
-						abilityManager.setVoidActive(false);
-						voidHazardDeath = true;
-						startDeathSequence();
-						return;
-					}
-				}
-
-				// Update black holes
-				for (BlackHole bh : blackHoles) {
-					bh.update();
-					
-					// Apply gravity to ship
-					Point2D.Double gravity = bh.applyGravity(ship.getX(), ship.getY());
-					ship.setX(ship.getX() + gravity.x);
-					ship.setY(ship.getY() + gravity.y);
-					
-					// Check if consumed
-					if (!fadeActive && bh.isShipConsumed(ship.getX(), ship.getY())) {
-						blackHoleDeath = true;
-						startDeathSequence();
-						return;
-					}
-				}
-
-				// Update cosmic entities
-				for (CosmicEntity ce : cosmicEntities) {
-					ce.update(ship.getX(), ship.getY());
-					
-					if (!fadeActive && !ship.getVoidEnergy().isActive() && ce.isNearShip(ship.getBounds())) {
-						cosmicEntityDeath = true;
-						startDeathSequence();
-						return;
-					}
-				}
-
 				// Update visual effects
                 starField.setVoidMode(ship.getVoidEnergy().isActive());
                 starField.update(ship.getX() - WIDTH / 2.0, ship.getY() - HEIGHT / 2.0,
@@ -682,9 +746,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 if (rotatingRight) ship.rotateRight();
                 ship.updatePhysics();
                 
-				// ====== Ability Effects ======
-                // Asteroid Collision with Ship & Time Slow effect
-				
+                // Asteroid Collision with Ship & Time Slow effect				
 				if (abilityManager.isTimeSlowActive())
 					for (Asteroid a : asteroids) {
 						a.setSlowedVelocity(abilityManager.getTimeScale());
@@ -720,7 +782,39 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 							
 							shieldIt.remove();
 							if (a.getSize() != Asteroid.Size.SMALL) {
-								newAsteroids.addAll(a.split());
+								asteroidsToAdd.addAll(a.split());
+							}
+						}
+					}
+					
+					// Damage void creatures
+					for (VoidCreature vc : voidCreatures) {
+						double dx = vc.getX() - ship.getX();
+						double dy = vc.getY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						
+						if (dist < abilityManager.getShieldRadius()) {
+							vc.takeDamage(100); // Shield does 100 damage
+							if (vc.isDead()) {
+								particleSystem.createVoidCreatureExplosion(vc.getX(), vc.getY());
+								creaturesToRemove.add(vc);
+								currentTotalCreatureSizeValue -= vc.getSizeValue();
+							}
+						}
+					}
+					
+					// Damage cosmic entities
+					for (CosmicEntity ce : cosmicEntities) {
+						double dx = ce.getX() - ship.getX();
+						double dy = ce.getY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						
+						if (dist < abilityManager.getShieldRadius()) {
+							ce.takeDamage(100);
+							if (ce.isDead()) {
+								particleSystem.createCosmicEntityExplosion(ce.getX(), ce.getY());
+								cosmicEntitiesToRemove.add(ce);
+								currentTotalEntitySizeValue -= ce.getSizeValue();
 							}
 						}
 					}
@@ -759,13 +853,96 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				}
 
 				// ====== Collisions & Physics ======
-				asteroidsToRemove.clear();
-                newAsteroids.clear();
-                lasersToRemove.clear(); 
-                bulletsToRemove.clear();
-                voidHazardsToRemove.clear();
-                blackHolesToRemove.clear();
-                cosmicEntitiesToRemove.clear();
+				// Spawn creatures and entities to meet target total size value
+				if (!levelStarting && currentTotalCreatureSizeValue < targetTotalCreatureSizeValue) trySpawnCreatures();
+				if (!levelStarting && currentTotalEntitySizeValue < targetTotalEntitySizeValue) trySpawnEntities();
+
+				// Update void hazards
+				Iterator<VoidHazard> vhIt = voidHazards.iterator();
+				while (vhIt.hasNext()) {
+					VoidHazard vh = vhIt.next();
+					vh.update();
+
+					if (!vh.isAlive()) {
+						vhIt.remove();
+
+						// queue respawn
+						VoidHazard.Type[] types = VoidHazard.Type.values();
+						hazardsToAdd.add(new VoidHazard(WIDTH, HEIGHT, types[rand.nextInt(types.length)]));
+					} else if (!fadeActive && ship.getVoidEnergy().isActive() && vh.intersects(ship.getBounds())) {
+						voidHazardDeath = true;
+						startDeathSequence();
+						return;
+					}
+				}
+
+				// Apply additions after iteration ends
+				if (!hazardsToAdd.isEmpty()) {
+					voidHazards.addAll(hazardsToAdd);
+				}
+				/*
+				// Rebuild boids grids (broad-phase)
+				voidCreatureGrid.clear();
+				for (VoidCreature vc : voidCreatures) {
+					voidCreatureGrid.insert(vc.getX(), vc.getY(), vc);
+				}
+				cosmicEntityGrid.clear();
+				for (CosmicEntity ce : cosmicEntities) {
+					cosmicEntityGrid.insert(ce.getX(), ce.getY(), ce);
+				}*/
+				
+				// Update void creatures with boids
+				for (VoidCreature vc : voidCreatures) {
+					/*
+					if (ship.getVoidEnergy().isActive()) {
+						voidCreatureGrid.queryNearby(vc.getX(), vc.getY(), vcNeighbors);
+						vc.updateWithBoids(ship.getX(), ship.getY(), vcNeighbors);
+					} else {
+						vc.update(ship.getX(), ship.getY());
+					}*/
+
+					vc.update(ship.getX(), ship.getY());
+
+					if (!fadeActive && ship.getVoidEnergy().isActive() && vc.intersects(ship.getBounds())) {
+						cosmicEntityDeath = true;
+						startDeathSequence();
+						return;
+					}
+				}
+
+				// Update cosmic entities
+				for (CosmicEntity ce : cosmicEntities) {
+					/*if (!ship.getVoidEnergy().isActive()) {
+						cosmicEntityGrid.queryNearby(ce.getX(), ce.getY(), ceNeighbors);
+						ce.updateWithBoids(ship.getX(), ship.getY(), ceNeighbors);
+					} else {
+						ce.update(ship.getX(), ship.getY());
+					}*/
+					ce.update(ship.getX(), ship.getY());
+					
+					if (!fadeActive && !ship.getVoidEnergy().isActive() && ce.isNearShip(ship.getBounds())) {
+						cosmicEntityDeath = true;
+						startDeathSequence();
+						return;
+					}
+				}
+
+				// Update black holes
+				for (BlackHole bh : blackHoles) {
+					bh.update();
+					
+					// Apply gravity to ship
+					Point2D.Double gravity = bh.applyGravity(ship.getX(), ship.getY());
+					ship.setX(ship.getX() + gravity.x);
+					ship.setY(ship.getY() + gravity.y);
+					
+					// Check if consumed
+					if (!fadeActive && bh.isShipConsumed(ship.getX(), ship.getY())) {
+						blackHoleDeath = true;
+						startDeathSequence();
+						return;
+					}
+				}
 				// ------ Asteroid Physics & Collision with Ship ------
 				for (Asteroid asteroid : asteroids) {
 					asteroid.update();
@@ -806,7 +983,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 							asteroidsToRemove.add(asteroid);
 						} else {
 							asteroidsToRemove.add(asteroid);
-							newAsteroids.addAll(asteroid.split());
+							asteroidsToAdd.addAll(asteroid.split());
 						}
 						*/
 						
@@ -875,6 +1052,41 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	                	&& laser.intersects(abilityManager.getDroneBounds(ship.getX(), ship.getY()))) {
 	                	abilityManager.damageDrone();
 	                }
+
+					// Damage void creatures with lasers
+					for (VoidCreature vc : voidCreatures) {
+						if (laser.intersects(new Polygon(
+							new int[]{(int)vc.getX() - vc.getSize()/2, (int)vc.getX() + vc.getSize()/2},
+							new int[]{(int)vc.getY() - vc.getSize()/2, (int)vc.getY() + vc.getSize()/2},
+							2))) {
+							vc.takeDamage(50); // Lasers do 50 damage
+							if (vc.isDead()) {
+								particleSystem.createVoidCreatureExplosion(vc.getX(), vc.getY());
+								creaturesToRemove.add(vc);
+								currentTotalCreatureSizeValue -= vc.getSizeValue();
+							}
+							lasersToRemove.add(laser);
+							break;
+						}
+					}
+
+					// Damage cosmic entities with lasers
+					for (CosmicEntity ce : cosmicEntities) {
+						Rectangle ceBounds = new Rectangle((int)ce.getX() - 50, (int)ce.getY() - 50, 100, 100);
+						if (laser.intersects(new Polygon(
+							new int[]{ceBounds.x, ceBounds.x + ceBounds.width, ceBounds.x + ceBounds.width, ceBounds.x},
+							new int[]{ceBounds.y, ceBounds.y, ceBounds.y + ceBounds.height, ceBounds.y + ceBounds.height},
+							4))) {
+							ce.takeDamage(50);
+							if (ce.isDead()) {
+								particleSystem.createCosmicEntityExplosion(ce.getX(), ce.getY());
+								cosmicEntitiesToRemove.add(ce);
+								currentTotalEntitySizeValue -= ce.getSizeValue();
+							}
+							lasersToRemove.add(laser);
+							break;
+						}
+					}
                     
 					if (!ship.getVoidEnergy().isActive()) {
 						for (Asteroid asteroid : asteroids) {
@@ -891,7 +1103,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 									asteroidsToRemove.add(asteroid);
 								} else {
 									asteroidsToRemove.add(asteroid);
-									newAsteroids.addAll(asteroid.split());
+									asteroidsToAdd.addAll(asteroid.split());
 								}
 								
 								switch (asteroid.getSize()) {
@@ -949,7 +1161,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						}
 					}
                 }
-                voidLasers.removeAll(lasersToRemove);
                 
                 // ------ Bullet Collision ------
 				// Update bullets and check for bullet collisions
@@ -969,6 +1180,51 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	                	abilityManager.damageDrone();
 	                	bulletsToRemove.add(bullet);
 	                }
+
+					// Damage void creatures with bullets
+					for (VoidCreature vc : voidCreatures) {
+						if (vc.intersects(new Polygon(
+							new int[]{(int)bullet.getBounds().x, (int)(bullet.getBounds().x + bullet.getBounds().width)},
+							new int[]{(int)bullet.getBounds().y, (int)(bullet.getBounds().y + bullet.getBounds().height)},
+							2))) {
+							vc.takeDamage(25);
+							if (vc.isDead()) {
+								particleSystem.createVoidCreatureExplosion(vc.getX(), vc.getY());
+								creaturesToRemove.add(vc);
+								currentTotalCreatureSizeValue -= vc.getSizeValue();
+							}
+							bulletsToRemove.add(bullet);
+							break;
+						}
+					}
+
+					// Damage cosmic entities with bullets
+					for (CosmicEntity ce : cosmicEntities) {
+						Rectangle ceBounds = new Rectangle((int)ce.getX() - 50, (int)ce.getY() - 50, 100, 100);
+						if (ceBounds.intersects(bullet.getBounds().getBounds2D())) {
+							ce.takeDamage(25);
+							if (ce.isDead()) {
+								particleSystem.createCosmicEntityExplosion(ce.getX(), ce.getY());
+								cosmicEntitiesToRemove.add(ce);
+								currentTotalEntitySizeValue -= ce.getSizeValue();
+							}
+							bulletsToRemove.add(bullet);
+							break;
+						}
+					}
+
+					// Damage cosmic entities
+					for (CosmicEntity ce : cosmicEntities) {
+						Rectangle ceBounds = new Rectangle((int)ce.getX() - 50, (int)ce.getY() - 50, 100, 100);
+						if (ceBounds.intersects(bullet.getBounds().getBounds2D())) {
+							ce.takeDamage(25);
+							if (ce.isDead()) {
+								cosmicEntitiesToRemove.add(ce);
+								currentTotalEntitySizeValue -= ce.getSizeValue();
+							}
+							break;
+						}
+					}
                     
                     for (Asteroid asteroid : asteroids) {
                         if (asteroid.getBounds().intersects(bullet.getBounds().getBounds2D())) {
@@ -986,7 +1242,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                                 asteroidsToRemove.add(asteroid);
                             } else {
                                 asteroidsToRemove.add(asteroid);
-                                newAsteroids.addAll(asteroid.split());
+                                asteroidsToAdd.addAll(asteroid.split());
                             }
                             switch (asteroid.getSize()) {
 								case LARGE -> {
@@ -1124,6 +1380,18 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 							voidHazardsToRemove.add(v);
 						}
 					}
+
+					// Nova Blast Destroying Void Creatures
+					for (VoidCreature vc : voidCreatures) {
+						double dx = vc.getX() - ship.getX();
+						double dy = vc.getY() - ship.getY();
+						double dist = Math.sqrt(dx * dx + dy * dy);
+						if (dist < novaRadius) {
+							particleSystem.createVoidCreatureExplosion(vc.getX(), vc.getY());
+							creaturesToRemove.add(vc);
+							currentTotalCreatureSizeValue -= vc.getSizeValue();
+						}
+					}
 					
 					// Nova Blast Destroying Black Holes
 					for (BlackHole bh : blackHoles) {
@@ -1163,12 +1431,24 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					ship.setFuel(1000);
 				}
                 
+				voidLasers.removeAll(lasersToRemove);
                 bullets.removeAll(bulletsToRemove);
                 asteroids.removeAll(asteroidsToRemove);
-                asteroids.addAll(newAsteroids);
+                asteroids.addAll(asteroidsToAdd);
                 voidHazards.removeAll(voidHazardsToRemove);
                 blackHoles.removeAll(blackHolesToRemove);
                 cosmicEntities.removeAll(cosmicEntitiesToRemove);
+				voidCreatures.removeAll(creaturesToRemove);
+
+				asteroidsToRemove.clear();
+                asteroidsToAdd.clear();
+				hazardsToAdd.clear();
+                lasersToRemove.clear(); 
+                bulletsToRemove.clear();
+                voidHazardsToRemove.clear();
+                blackHolesToRemove.clear();
+                cosmicEntitiesToRemove.clear();
+				creaturesToRemove.clear();
             	
             	repaint();
             }
@@ -1304,11 +1584,14 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				// Draw void hazards
 				for (VoidHazard vh : voidHazards) { vh.draw(g2, ship.getVoidEnergy().isActive()); }
 
+				// Draw void creatures
+				for (VoidCreature vc : voidCreatures) { vc.draw(g2, ship.getVoidEnergy().isActive()); }
+
 				// Draw black holes
 				for (BlackHole bh : blackHoles) { bh.draw(g2); }
 
 				// Draw cosmic entities
-				for (CosmicEntity ce : cosmicEntities) { ce.draw(g2); }
+				for (CosmicEntity ce : cosmicEntities) { ce.draw(g2, ship.getVoidEnergy().isActive()); }
 				
 				// Draw starfield
 				starField.draw(g2);

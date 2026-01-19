@@ -117,6 +117,12 @@ public class ParticleSystem {
         createExplosion(x, y, new Color(100, 50, 200, 255), 40, 3.0);
         createExplosion(x, y, new Color(255, 255, 255, 255), 30, 2.0);
     }
+
+    public void createVoidCreatureExplosion(double x, double y) {
+        createExplosion(x, y, new Color(180, 0, 255, 180), 50, 5.0);
+        createExplosion(x, y, new Color(100, 50, 200, 255), 40, 3.0);
+        createExplosion(x, y, new Color(255, 255, 255, 255), 30, 2.0);
+    }
     
     public void update() {
         int write = 0;
