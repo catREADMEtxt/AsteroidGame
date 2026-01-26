@@ -23,7 +23,6 @@ public class StarField {
     private final Random rand = new Random();
     private int width, height;
     private boolean voidMode = false;
-    private double lastShipVX = 0, lastShipVY = 0;
     
     public StarField(int width, int height, int count) {
         this.width = width;
@@ -44,8 +43,6 @@ public class StarField {
     
     public void update(double shipX, double shipY, double shipVX, double shipVY) {
         for (Star star : stars) {
-            lastShipVX = shipVX;
-            lastShipVY = shipVY;
             // Parallax effect based on depth
             star.x -= shipVX * star.z * 0.5;
             star.y -= shipVY * star.z * 0.5;
@@ -59,13 +56,20 @@ public class StarField {
     }
 
     public void updateDimensions(int newWidth, int newHeight) {
+        int oldWidth = this.width;
+        int oldHeight = this.height;
+
         this.width = newWidth;
         this.height = newHeight;
-        
-        // Reposition stars that are now out of bounds
-        for (Star star : stars) {
-            if (star.x > width) star.x = width;
-            if (star.y > height) star.y = height;
+
+        if (oldWidth > 0 && oldHeight > 0) {
+            double sx = newWidth / (double) oldWidth;
+            double sy = newHeight / (double) oldHeight;
+
+            for (Star star : stars) {
+                star.x *= sx;
+                star.y *= sy;
+            }
         }
     }
     

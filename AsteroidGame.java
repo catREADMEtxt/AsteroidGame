@@ -103,13 +103,12 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private final SpatialHashGrid<CosmicEntity> cosmicEntityGrid = new SpatialHashGrid<>(BOIDS_CELL);
 	
 	// ====== Asthetics ======
-	private GalaxyBackground galaxyBackground;
-	private SpaceGrid spaceGrid;
+	private final GalaxyBackground galaxyBackground;
+	private final SpaceGrid spaceGrid;
 	private final List<Meteor> meteors;
 	private final StarField starField;
 	private final ParticleSystem particleSystem;
 	// Menu animation fields
-	private float menuTitlePulse = 0;
 	private int menuBackgroundShift = 0;
 	// Death screen animation fields
 	private int deathExplosionFrame;
@@ -151,9 +150,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     private Ship ship;
     private String gameState = "menu"; // "menu", "playing", "paused", "death"
 	private int hoveredButton;
-	private boolean showingInstructions;
-	private int instructionPage = 0;
-	private final int totalInstructionPages = 3;
 	private FloatingTextManager floatingTextManager;
 	// Deaths
 	private boolean voidDeath;
@@ -162,39 +158,33 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private boolean voidHazardDeath;
 	private boolean blackHoleDeath;
 	private boolean cosmicEntityDeath;
+	private boolean voidCreatureDeath;
     // Save system
     private final File saveFile = new File("save.dat");
     private final File leaderBoardDataFile = new File("leaderBoardData.dat");
-	// Instructions
-	private boolean hoveredBackArrow = false;
-	private boolean hoveredLeftArrow = false;
-	private boolean hoveredRightArrow = false;
 	// Control Config
 	private ControlConfig controlConfig;
 	private AbilityLoadout abilityLoadout;
-	private boolean showingControlPanel = false;
-	private String configuringAction = null;
-	private boolean waitingForKey = false;
-	private int selectedSlot = -1;
-	private int hoveredSlot = -1;
-	private int hoveredAbility = -1;
-	private int hoveredKeyConfig = -1;
-	private int controlPanelScrollOffset = 0;
-	private final int maxControlPanelScroll = 600; // Adjust based on content height
-	private boolean draggingScrollbar = false;
-	private boolean hoveredScrollbar = false;
-	private int scrollbarDragStartY = 0;
-	private int scrollbarDragStartOffset = 0;
+	private SettingsPanel settingsPanel;
+	private boolean showingSettings = false;
 	// Game Stats
 	private final int maxBlackHoles = 3;
 	private int targetTotalCreatureSizeValue = 0;
 	private int currentTotalCreatureSizeValue = 0;
 	private int targetTotalEntitySizeValue = 0;
 	private int currentTotalEntitySizeValue = 0;
+	// Story Terminal
+	private StoryTerminal storyTerminal;
+	private boolean showingStory = false;
 
 
 	public AsteroidGame() {
 		timer = new Timer(16, this); // ~60 FPS
+		
+		// Initialize persistent configuration objects before resetVars
+		abilityLoadout = new AbilityLoadout();
+		controlConfig = new ControlConfig();
+		
 		resetVars();
 
 		starField = new StarField(WIDTH, HEIGHT, 150);
@@ -241,6 +231,10 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	    voidDeath = false;
 	    bulletDeath = false;
 	    asteroidDeath = false;
+		voidHazardDeath = false;
+		blackHoleDeath = false;
+		cosmicEntityDeath = false;
+		voidCreatureDeath = false;
 	    deathExplosionFrame = 0;
 	    deathExplosionDone = false;
 		fadeActive = false;
@@ -249,6 +243,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		shipLevel = new ShipLevel();
 		teleportAnchor = new TeleportAnchor();
 		abilityManager = new AbilityManager();
+		abilityManager.syncWithLoadout(abilityLoadout, shipLevel);
 		floatingTextManager = new FloatingTextManager();
 		voidHazards.clear();
 		blackHoles.clear();
@@ -259,26 +254,41 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		voidCooldownTimer = 0;
 		fadeCooldownTimer = 0;
 		hoveredButton = -1;
-		showingInstructions = false;
 		noSavedGame = true;
-		abilityLoadout = new AbilityLoadout();
-		controlConfig = new ControlConfig();
-		showingControlPanel = false;
-		configuringAction = null;
-		waitingForKey = false;
-		selectedSlot = -1;
-		hoveredSlot = -1;
-		hoveredAbility = -1;
-		hoveredKeyConfig = -1;
+		settingsPanel = new SettingsPanel(WIDTH, HEIGHT, controlConfig, abilityLoadout);
+    	showingSettings = false;
+		storyTerminal = new StoryTerminal();
+		showingStory = false;
 	}
 
     void setupMenu() {
 		setLayout(null);
 		setBackground(Color.BLACK);
-				
-		// Drawing custom buttons in paintComponent
-		// Add mouse listener for custom button clicks
+		
 		addMouseListener(new MouseAdapter() {
+			@Override
+			public void mousePressed(MouseEvent e) {
+				if (!gameState.equals("menu")) return;
+				
+				if (showingSettings) {
+					settingsPanel.handleMousePress(e.getX(), e.getY(),
+						(WIDTH - (int)(WIDTH * 0.85)) / 2,
+						(HEIGHT - (int)(HEIGHT * 0.75)) / 2,
+						(int)(WIDTH * 0.85),
+						(int)(HEIGHT * 0.75));
+					repaint();
+				}
+			}
+			
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (!gameState.equals("menu")) return;
+				
+				if (showingSettings) {
+					settingsPanel.handleMouseRelease();
+				}
+			}
+			
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (!gameState.equals("menu")) return;
@@ -286,130 +296,101 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				int mx = e.getX();
 				int my = e.getY();
 				
-				if (showingInstructions) {
-					// Back arrow click
-					if (mx >= 40 && mx <= 130 && my >= 40 && my <= 70) {
-						showingInstructions = false;
-						instructionPage = 0;
-						repaint();
-						return;
-					}
+				if (showingSettings) {
+					boolean closeClicked = settingsPanel.handleClick(mx, my, AsteroidGame.this);
 					
-					// Left arrow
-					if (instructionPage > 0) {
-						if (Math.sqrt(Math.pow(mx - (WIDTH/2 - 100), 2) + Math.pow(my - (HEIGHT - 80), 2)) < 25) {
-							instructionPage--;
-							repaint();
-							return;
-						}
+					if (closeClicked) {
+						showingSettings = false;
+						abilityManager.syncWithLoadout(abilityLoadout, shipLevel);
 					}
-					
-					// Right arrow
-					if (instructionPage < totalInstructionPages - 1) {
-						if (Math.sqrt(Math.pow(mx - (WIDTH/2 + 100), 2) + Math.pow(my - (HEIGHT - 80), 2)) < 25) {
-							instructionPage++;
-							repaint();
-							return;
-						}
-					}
+					repaint();
 					return;
 				}
 				
-				if (showingControlPanel) {
-					// Back arrow click
-					if (mx >= 40 && mx <= 130 && my >= 40 && my <= 70) {
-						showingControlPanel = false;
-						configuringAction = null;
-						waitingForKey = false;
-						selectedSlot = -1;
-						repaint();
-						return;
-					}
-					
-					handleControlPanelClick(mx, my);
-					return;
+				// New Game button
+				if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 &&
+					my >= HEIGHT/2 - 20 && my <= HEIGHT/2 + 30) {
+					startNewGame();
 				}
 				
-				// Menu button clicks
-				if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150) {
-					if (my >= HEIGHT/2 - 80 && my <= HEIGHT/2 - 30) startNewGame();
-					else if (my >= HEIGHT/2 - 10 && my <= HEIGHT/2 + 40) resumeGame();
-					else if (my >= HEIGHT/2 + 60 && my <= HEIGHT/2 + 110) showingInstructions = true;
-					else if (my >= HEIGHT/2 + 130 && my <= HEIGHT/2 + 180) showingControlPanel = true;
+				// Resume button
+				if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 &&
+					my >= HEIGHT/2 + 50 && my <= HEIGHT/2 + 100) {
+					resumeGame();
 				}
+				
+				// Settings button
+				if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 &&
+					my >= HEIGHT/2 + 120 && my <= HEIGHT/2 + 170) {
+					showingSettings = !showingSettings;
+				}
+
+				// Story button
+				if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 &&
+					my >= HEIGHT/2 + 190 && my <= HEIGHT/2 + 240) {
+					showingStory = true;
+					storyTerminal = new StoryTerminal(); // Reset story each time
+				}
+				
 				repaint();
-			}
-			@Override
-			public void mouseReleased(MouseEvent e) {
-				draggingScrollbar = false;
 			}
 		});
 		
 		addMouseMotionListener(new MouseMotionAdapter() {
 			@Override
-			public void mouseDragged(MouseEvent e) {
-				if (draggingScrollbar && showingControlPanel) {
-					int scrollbarHeight = HEIGHT - 200;
-					int deltaY = e.getY() - scrollbarDragStartY;
-					
-					int contentHeight = maxControlPanelScroll + scrollbarHeight;
-					float thumbSizeRatio = (float)scrollbarHeight / contentHeight;
-					int thumbHeight = Math.max(30, (int)(scrollbarHeight * thumbSizeRatio));
-					
-					float scrollableHeight = scrollbarHeight - thumbHeight;
-					float scrollDelta = (deltaY / scrollableHeight) * maxControlPanelScroll;
-					
-					controlPanelScrollOffset = (int)(scrollbarDragStartOffset + scrollDelta);
-					controlPanelScrollOffset = Math.max(0, Math.min(maxControlPanelScroll, controlPanelScrollOffset));
-					repaint();
-				}
-			}
-			@Override
 			public void mouseMoved(MouseEvent e) {
+				if (!gameState.equals("menu")) return;
+				
 				int mx = e.getX();
 				int my = e.getY();
 				
-				if (showingInstructions) {
-					// Check back arrow (top-left)
-					hoveredBackArrow = (mx >= 40 && mx <= 130 && my >= 40 && my <= 70);
-					
-					// Check left arrow
-					hoveredLeftArrow = instructionPage > 0 && 
-						Math.sqrt(Math.pow(mx - (WIDTH/2 - 100), 2) + Math.pow(my - (HEIGHT - 80), 2)) < 25;
-					
-					// Check right arrow
-					hoveredRightArrow = instructionPage < totalInstructionPages - 1 && 
-						Math.sqrt(Math.pow(mx - (WIDTH/2 + 100), 2) + Math.pow(my - (HEIGHT - 80), 2)) < 25;
-					
+				if (showingSettings) {
+					settingsPanel.handleMouseMove(mx, my);
 					repaint();
 					return;
 				}
 				
-				if (showingControlPanel) {
-					handleControlPanelMouseMove(mx, my);
-					return;
-				}
+				if (showingSettings) return;
 				
-				// Menu buttons hover
 				hoveredButton = -1;
-				if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150) {
-					if (my >= HEIGHT/2 - 80 && my <= HEIGHT/2 - 30) hoveredButton = 0;
-					else if (my >= HEIGHT/2 - 10 && my <= HEIGHT/2 + 40) hoveredButton = 1;
-					else if (my >= HEIGHT/2 + 60 && my <= HEIGHT/2 + 110) hoveredButton = 2;
-					else if (my >= HEIGHT/2 + 130 && my <= HEIGHT/2 + 180) hoveredButton = 3;
+				if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 && 
+						my >= HEIGHT/2 - 20 && my <= HEIGHT/2 + 30) {
+					hoveredButton = 0; // New Game
+				} else if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 && 
+						my >= HEIGHT/2 + 50 && my <= HEIGHT/2 + 100) {
+					hoveredButton = 1; // Resume
+				} else if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 && 
+						my >= HEIGHT/2 + 120 && my <= HEIGHT/2 + 170) {
+					hoveredButton = 2; // Settings
+				} else if (mx >= WIDTH/2 - 150 && mx <= WIDTH/2 + 150 && 
+						my >= HEIGHT/2 + 190 && my <= HEIGHT/2 + 240) {
+					hoveredButton = 3; // Story
 				}
 				repaint();
 			}
-		});
-
-		addMouseWheelListener(new MouseWheelListener() {
+			
 			@Override
-			public void mouseWheelMoved(MouseWheelEvent e) {
-				if (showingControlPanel) {
-					controlPanelScrollOffset += e.getWheelRotation() * 30;
-					controlPanelScrollOffset = Math.max(0, Math.min(maxControlPanelScroll, controlPanelScrollOffset));
+			public void mouseDragged(MouseEvent e) {
+				if (showingSettings) {
+					settingsPanel.handleMouseDrag(e.getX(), e.getY(),
+						(WIDTH - (int)(WIDTH * 0.85)) / 2,
+						(HEIGHT - (int)(HEIGHT * 0.75)) / 2,
+						(int)(WIDTH * 0.85),
+						(int)(HEIGHT * 0.75));
 					repaint();
 				}
+			}
+		});
+		
+		addMouseWheelListener(e -> {
+			if (showingSettings) {
+				int mx = e.getX();
+				settingsPanel.handleScroll(e.getWheelRotation(), mx, 
+					(WIDTH - (int)(WIDTH * 0.85)) / 2,
+					(HEIGHT - (int)(HEIGHT * 0.75)) / 2,
+					(int)(WIDTH * 0.85),
+					(int)(HEIGHT * 0.75));
+				repaint();
 			}
 		});
 	}
@@ -425,6 +406,8 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		voidCreatures.clear();
 		blackHoles.clear();
 		cosmicEntities.clear();
+
+		updateDimensions();
 	
 	    levelStarting = true;
 	    
@@ -519,157 +502,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		voidCreatures.clear();
 		voidHazards.clear();
 	    repaint();
-	}	
-
-	private void handleControlPanelMouseMove(int mx, int my) {
-		// Back arrow
-		hoveredBackArrow = (mx >= 40 && mx <= 130 && my >= 40 && my <= 70);
-		
-		// Scrollbar hover
-		int scrollbarX = WIDTH - 130;
-		int scrollbarY = 130;
-		int scrollbarWidth = 20;
-		int scrollbarHeight = HEIGHT - 200;
-		
-		int contentHeight = maxControlPanelScroll + scrollbarHeight;
-		float thumbSizeRatio = (float)scrollbarHeight / contentHeight;
-		int thumbHeight = Math.max(30, (int)(scrollbarHeight * thumbSizeRatio));
-		float scrollRatio = (float)controlPanelScrollOffset / maxControlPanelScroll;
-		int thumbY = scrollbarY + (int)((scrollbarHeight - thumbHeight) * scrollRatio);
-		
-		hoveredScrollbar = mx >= scrollbarX && mx <= scrollbarX + scrollbarWidth &&
-						my >= thumbY && my <= thumbY + thumbHeight;
-		
-		// Ability slots (adjust for scroll)
-		int adjustedMy = my + controlPanelScrollOffset;
-		
-		int oldHoveredSlot = hoveredSlot;
-		hoveredSlot = -1;
-		for (int i = 0; i < 4; i++) {
-			Rectangle bounds = getControlPanelSlotBounds(i);
-			if (mx >= bounds.x && mx <= bounds.x + bounds.width &&
-				adjustedMy >= bounds.y && adjustedMy <= bounds.y + bounds.height) {
-				hoveredSlot = i;
-				break;
-			}
-		}
-		
-		int oldHoveredAbility = hoveredAbility;
-		hoveredAbility = -1;
-		String[] allAbilities = abilityLoadout.getAllAbilities();
-		for (int i = 0; i < allAbilities.length; i++) {
-			Rectangle bounds = getControlPanelAvailableAbilityBounds(i);
-			if (mx >= bounds.x && mx <= bounds.x + bounds.width &&
-				adjustedMy >= bounds.y && adjustedMy <= bounds.y + bounds.height) {
-				hoveredAbility = i;
-				break;
-			}
-		}
-		
-		int oldHoveredKeyConfig = hoveredKeyConfig;
-		hoveredKeyConfig = -1;
-		String[] actions = {"ability1", "ability2", "ability3", "ability4", "shoot", "thrust", "left", "right", "hyper"};
-		for (int i = 0; i < actions.length; i++) {
-			Rectangle bounds = getControlPanelKeyConfigBounds(i);
-			if (mx >= bounds.x && mx <= bounds.x + bounds.width &&
-				adjustedMy >= bounds.y && adjustedMy <= bounds.y + bounds.height) {
-				hoveredKeyConfig = i;
-				break;
-			}
-		}
-		
-		if (oldHoveredSlot != hoveredSlot || oldHoveredAbility != hoveredAbility || 
-			oldHoveredKeyConfig != hoveredKeyConfig) {
-			repaint();
-		}
-	}
-
-	private void handleControlPanelClick(int mx, int my) {
-		// Adjust for scroll
-		int adjustedMy = my + controlPanelScrollOffset;
-		
-		// Check scrollbar thumb
-		int scrollbarX = WIDTH - 130;
-		int scrollbarY = 130;
-		int scrollbarWidth = 20;
-		int scrollbarHeight = HEIGHT - 200;
-		
-		int contentHeight = maxControlPanelScroll + scrollbarHeight;
-		float thumbSizeRatio = (float)scrollbarHeight / contentHeight;
-		int thumbHeight = Math.max(30, (int)(scrollbarHeight * thumbSizeRatio));
-		float scrollRatio = (float)controlPanelScrollOffset / maxControlPanelScroll;
-		int thumbY = scrollbarY + (int)((scrollbarHeight - thumbHeight) * scrollRatio);
-		
-		if (mx >= scrollbarX && mx <= scrollbarX + scrollbarWidth &&
-			my >= thumbY && my <= thumbY + thumbHeight) {
-			draggingScrollbar = true;
-			scrollbarDragStartY = my;
-			scrollbarDragStartOffset = controlPanelScrollOffset;
-			return;
-		}
-		
-		// Check ability slot clicks
-		for (int i = 0; i < 4; i++) {
-			Rectangle slotBounds = getControlPanelSlotBounds(i);
-			if (mx >= slotBounds.x && mx <= slotBounds.x + slotBounds.width &&
-				adjustedMy >= slotBounds.y && adjustedMy <= slotBounds.y + slotBounds.height) {
-				selectedSlot = i;
-				repaint();
-				return;
-			}
-		}
-		
-		// Check available ability clicks
-		if (selectedSlot != -1) {
-			String[] allAbilities = abilityLoadout.getAllAbilities();
-			for (int i = 0; i < allAbilities.length; i++) {
-				Rectangle abilityBounds = getControlPanelAvailableAbilityBounds(i);
-				if (mx >= abilityBounds.x && mx <= abilityBounds.x + abilityBounds.width &&
-					adjustedMy >= abilityBounds.y && adjustedMy <= abilityBounds.y + abilityBounds.height) {
-					abilityLoadout.setSlot(selectedSlot, allAbilities[i]);
-					selectedSlot = -1;
-					repaint();
-					return;
-				}
-			}
-		}
-		
-		// Check control key clicks
-		String[] actions = {"ability1", "ability2", "ability3", "ability4", "shoot", "thrust", "left", "right", "hyper"};
-		for (int i = 0; i < actions.length; i++) {
-			Rectangle keyBounds = getControlPanelKeyConfigBounds(i);
-			if (mx >= keyBounds.x && mx <= keyBounds.x + keyBounds.width &&
-				adjustedMy >= keyBounds.y && adjustedMy <= keyBounds.y + keyBounds.height) {
-				configuringAction = actions[i];
-				waitingForKey = true;
-				repaint();
-				return;
-			}
-		}
-		
-		// Deselect if clicking elsewhere
-		selectedSlot = -1;
-		repaint();
-	}
-    
-	private void handleControlPanelKeyPress(int keyCode) {
-		if (keyCode == KeyEvent.VK_ESCAPE || keyCode == KeyEvent.VK_ENTER) {
-			waitingForKey = false;
-			configuringAction = null;
-			repaint();
-			return;
-		}
-		
-		if (controlConfig.setControl(configuringAction, keyCode)) {
-			waitingForKey = false;
-			configuringAction = null;
-			repaint();
-		} else {
-			// Key already in use
-			waitingForKey = false;
-			configuringAction = null;
-			repaint();
-		}
 	}
 
 	public void updateDimensions() {
@@ -686,6 +518,15 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 
 		// Update Ship
 		ship.updateDimensions(WIDTH, HEIGHT);
+		if (level==0 && ship.getVelocity() == 0) {
+			ship.setX(WIDTH / 2);
+			ship.setY(HEIGHT / 2);
+		}
+
+		// Update Settings Panel
+		if (settingsPanel != null) {
+            settingsPanel.updateDimensions(WIDTH, HEIGHT);
+        }
 	}
 
 	private void trySpawnCreatures() {
@@ -739,7 +580,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
         switch (gameState) {
             case "menu" -> {
                 // Menu animations
-                menuTitlePulse += 0.05f;
                 menuBackgroundShift = (menuBackgroundShift + 1) % WIDTH;
                 for (Meteor m : meteors) {
                     m.update();
@@ -751,6 +591,14 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                     	deltaAlpha = 2;
                     errorAlpha+=deltaAlpha;
                 }
+				
+				storyTerminal.update();
+				// Check if user wants to exit story
+				if (storyTerminal.isExitRequested()) {
+					showingStory = false;
+				}
+				repaint();
+        		return;
             }
             case "playing" -> {
                 // Decrement the level timer every tick (frame)
@@ -1081,7 +929,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					}
 
 					if (!fadeActive && ship.getVoidEnergy().isActive() && vc.intersects(ship.getBounds())) {
-						cosmicEntityDeath = true;
+						voidCreatureDeath = true;
 						startDeathSequence();
 						return;
 					}
@@ -1669,17 +1517,17 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				// Title with chromatic aberration effect
 				drawNeonTitle(g2);
 				
-				// Instructions popup
-				if (showingInstructions) { 
-					drawNeonInstructionsPopup(g2); 
-				} else if (showingControlPanel) { 
-					drawNeonControlPanelPopup(g2); 
+				if (showingStory) {
+					// Draw story terminal (full screen)
+					storyTerminal.draw(g2, WIDTH, HEIGHT);
+				} else if (showingSettings) {
+					settingsPanel.draw((Graphics2D)g, controlConfig, abilityLoadout);
 				} else {
 					// Buttons
-					drawNeonMenuButton(g2, "NEW GAME", HEIGHT/2 - 80, hoveredButton == 0, true);
-					drawNeonMenuButton(g2, "RESUME", HEIGHT/2 - 10, hoveredButton == 1, !noSavedGame);
-					drawNeonMenuButton(g2, "INSTRUCTIONS", HEIGHT/2 + 60, hoveredButton == 2, true);
-					drawNeonMenuButton(g2, "CONTROLS", HEIGHT/2 + 130, hoveredButton == 3, true);
+					drawNeonMenuButton(g2, "NEW GAME", HEIGHT/2 - 20, hoveredButton == 0, true);
+					drawNeonMenuButton(g2, "RESUME", HEIGHT/2 + 50, hoveredButton == 1, !noSavedGame);
+					drawNeonMenuButton(g2, "SETTINGS", HEIGHT/2 + 120, hoveredButton == 2, true);
+					drawNeonMenuButton(g2, "STORY", HEIGHT/2 + 190, hoveredButton == 3, true);
 					
 					// Error message
 					if (noSavedGame) {
@@ -1690,11 +1538,11 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						g2.setColor(new Color(255, 0, 100, pulse / 3));
 						String errorMessage = "⚠ NO SAVED PROGRESS FOUND";
 						int errorX = WIDTH / 2 - g2.getFontMetrics().stringWidth(errorMessage) / 2;
-						g2.drawString(errorMessage, errorX - 2, HEIGHT/2 - 100 - 2);
-						g2.drawString(errorMessage, errorX + 2, HEIGHT/2 - 100 + 2);
+						g2.drawString(errorMessage, errorX - 2, HEIGHT/2 - 50 - 2);
+						g2.drawString(errorMessage, errorX + 2, HEIGHT/2 - 50 + 2);
 						
 						g2.setColor(new Color(0, 255, 255, pulse));
-						g2.drawString(errorMessage, errorX, HEIGHT/2 - 100);
+						g2.drawString(errorMessage, errorX, HEIGHT/2 - 50);
 					}
 				}
 			}
@@ -2540,715 +2388,11 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		g2.setStroke(new BasicStroke(1));
 	}
 
-	private void drawNeonInstructionsPopup(Graphics2D g2) {
-		// Full screen darkened background with grid
-		g2.setColor(new Color(0, 0, 20, 230));
-		g2.fillRect(0, 0, WIDTH, HEIGHT);
-		
-		// Draw grid
-		drawNeonGridOverlay(g2);
-		
-		// Back arrow (top-left)
-		drawBackArrow(g2, 40, 40, hoveredBackArrow);
-		
-		// Title
-		g2.setFont(FontLoader.loadTrenchThin(48));
-		g2.setColor(new Color(255, 0, 150));
-		String title = "[ INSTRUCTIONS ]";
-		FontMetrics titleFm = g2.getFontMetrics();
-		g2.drawString(title, WIDTH/2 - titleFm.stringWidth(title)/2, 80);
-		
-		// Neon underline
-		g2.setColor(new Color(0, 255, 255));
-		g2.setStroke(new BasicStroke(2));
-		g2.drawLine(WIDTH/2 - 200, 95, WIDTH/2 + 200, 95);
-		g2.setStroke(new BasicStroke(1));
-		
-		// Page indicator
-		g2.setFont(FontLoader.loadEightgonPlain(20));
-		g2.setColor(new Color(0, 255, 200));
-		String pageNum = "PAGE " + (instructionPage + 1) + " / " + totalInstructionPages;
-		g2.drawString(pageNum, WIDTH - 200, 80);
-		
-		// Content area
-		int contentY = 150;
-		
-		switch (instructionPage) {
-			case 0 -> drawInstructionControls(g2, contentY);
-			case 1 -> drawInstructionMechanics(g2, contentY);
-			case 2 -> drawInstructionAbilities(g2, contentY);
-		}
-		
-		// Navigation arrows at bottom
-		int arrowY = HEIGHT - 80;
-		
-		if (instructionPage > 0) {
-			drawNavigationArrow(g2, WIDTH/2 - 100, arrowY, true, hoveredLeftArrow);
-		}
-		
-		if (instructionPage < totalInstructionPages - 1) {
-			drawNavigationArrow(g2, WIDTH/2 + 100, arrowY, false, hoveredRightArrow);
-		}
-		
-		// Close hint
-		g2.setFont(new Font("Courier New", Font.PLAIN, 14));
-		g2.setColor(new Color(0, 255, 200, 150));
-		String hint = "[ ESC or I to close ]  [ ← → to navigate ]";
-		int hintWidth = g2.getFontMetrics().stringWidth(hint);
-		g2.drawString(hint, WIDTH/2 - hintWidth/2, HEIGHT - 30);
-	}
-
-	private void drawInstructionControls(Graphics2D g2, int startY) {
-		int lineHeight = 20;
-		int y = startY;
-		int leftX = 150;
-		
-		// Section: Movement
-		g2.setFont(FontLoader.loadTrenchThin(24));
-		g2.setColor(new Color(255, 100, 200));
-		g2.drawString(">> MOVEMENT", leftX, y);
-		y += lineHeight + 10;
-		
-		String[][] movementControls = {
-			{controlConfig.getKeyName(controlConfig.getKey("thrust")), "Thrust Forward"},
-			{controlConfig.getKeyName(controlConfig.getKey("left")) + " / " + controlConfig.getKeyName(controlConfig.getKey("right")), "Rotate Ship"},
-			{controlConfig.getKeyName(controlConfig.getKey("hyper")), "Hyper Mode (Fast)"},
-			{controlConfig.getKeyName(controlConfig.getKey("shoot")), "Fire Weapon"}
-		};
-		
-		g2.setFont(new Font("Courier New", Font.PLAIN, 18));
-		for (String[] line : movementControls) {
-			g2.setColor(new Color(0, 255, 255));
-			// Key
-			g2.drawString(line[0], leftX + 10, y);
-			// Description
-			g2.setColor(new Color(200, 200, 255));
-			g2.drawString(line[1], leftX + 140, y);
-			y += lineHeight;
-		}
-		
-		y += 20;
-		
-		// Section: Shortcuts
-		g2.setFont(FontLoader.loadTrenchThin(24));
-		g2.setColor(new Color(255, 100, 200));
-		g2.drawString(">> SHORTCUTS", leftX, y);
-		y += lineHeight + 10;
-		
-		String[][] shortcuts = {
-			{"I", "Toggle Instructions"},
-			{"C", "Toggle Control Panel"},
-			{"ENTER", "Start New Game (menu) / Back To Menu (resume)"},
-			{"ESC", "Close Pop-up / Pause & Save (in-game)"}
-		};
-		
-		g2.setFont(new Font("Courier New", Font.PLAIN, 18));
-		for (String[] line : shortcuts) {
-			g2.setColor(new Color(0, 255, 255));
-			g2.drawString(line[0], leftX + 10, y);
-			
-			g2.setColor(new Color(200, 200, 255));
-			g2.drawString(line[1], leftX + 140, y);
-			y += lineHeight;
-		}
-		
-		y += 20;
-		
-		// Section: Equipped Abilities
-		g2.setFont(FontLoader.loadTrenchThin(24));
-		g2.setColor(new Color(255, 100, 200));
-		g2.drawString(">> EQUIPPED ABILITIES", leftX, y);
-		y += lineHeight + 10;
-		
-		String[][] abilities = {
-			{controlConfig.getKeyName(controlConfig.getKey("ability1")), abilityLoadout.getSlot(0) + " [Slot 1]"},
-			{controlConfig.getKeyName(controlConfig.getKey("ability2")), abilityLoadout.getSlot(1) + " [Slot 2]"},
-			{controlConfig.getKeyName(controlConfig.getKey("ability3")), abilityLoadout.getSlot(2) + " [Slot 3]"},
-			{controlConfig.getKeyName(controlConfig.getKey("ability4")), abilityLoadout.getSlot(3) + " [Slot 4]"}
-		};
-		
-		g2.setFont(new Font("Courier New", Font.PLAIN, 18));
-		for (String[] line : abilities) {
-			g2.setColor(new Color(0, 255, 255));
-			g2.drawString(line[0], leftX + 10, y);
-			
-			g2.setColor(new Color(200, 200, 255));
-			g2.drawString(line[1], leftX + 140, y);
-			y += lineHeight;
-		}
-	}
-
-	private void drawInstructionMechanics(Graphics2D g2, int startY) {
-		int y = startY;
-		int leftX = 100;
-		int lineHeight = 20;
-		
-		String[] mechanics = {
-			"VOID DIMENSION",
-			"  • Enter parallel dimension, avoiding Asteroids & Cosmic Entities",
-			"  • The player, DIE after reaching threshold of 100",
-			"  • The Void slowly transforms the ship, empowering weapon and mobility effects with Void Energy",
-			"  • Drains if outside or being used",
-			"  • Void Hazards & Void Creatures are dimmed and harmless outside",
-			"",
-			"BLACK HOLE",
-			"  • Spawns at a random location every level, size increases with level",
-			"  • Pulls in Player, nearby asteroids, and projectiles; strength increases with distance",
-			"  • All mechanics above apply only after spawning animation completes",
-			"",
-			"COSMIC ENTITIES",
-			"  • Spawns in main dimension only", 
-			"  • Player becomes untrackable to the entities once in void",
-			"  • Speed, color, HP, and collision are proportional to size",
-			"  • Maximum spawn size increases with level",
-			"",
-			"VOID CREATURES",
-			"  • Spawns in void dimension only",
-			"  • Slower and smaller than cosmic entities",
-			"  • Player looses sanity if the void creature is killed (screen distortion effect)",
-		};
-		
-		g2.setFont(FontLoader.loadEightgonPlain(12));
-		for (String line : mechanics) {
-			if (line.isEmpty()) {
-				y += lineHeight / 2;
-				continue;
-			}
-			
-			if (line.startsWith("VOID") || line.startsWith("BLACK") || line.startsWith("COSMIC")) {
-				g2.setFont(FontLoader.loadTrenchThin(22));
-				g2.setColor(new Color(255, 100, 200));
-				
-				// Neon box around ability name
-				FontMetrics fm = g2.getFontMetrics();
-				int textWidth = fm.stringWidth(line);
-				g2.drawRect(leftX - 10, y - 20, textWidth + 20, 30);
-			} else {
-				g2.setFont(FontLoader.loadEightgonPlain(12));
-				g2.setColor(new Color(200, 220, 255));
-			}
-			
-			g2.drawString(line, leftX, y);
-			y += lineHeight;
-		}
-	}
-
-	private void drawInstructionAbilities(Graphics2D g2, int startY) {
-		int y = startY;
-		int leftX = 100;
-		int lineHeight = 40;
-		
-		String[] advanced = {
-			"ADVANCED ABILITIES",
-			"",
-			"SHIELD BURST",
-			"  • Destroys nearby asteroids",
-			"  • Expanding wave grants invulnerability",
-			"",
-			"TIME SLOW",
-			"  • Slows everything to 30% speed",
-			"  • Duration: 5 seconds",
-			"",
-			"COMBAT DRONE",
-			"  • Auto-firing orbital companion",
-			"  • Targets nearest asteroid",
-			"  • 3 HP - destroyed after 3 hits",
-			"",
-			"NOVA BLAST [ULTIMATE]",
-			"  • Screen-clearing explosion",
-			"  • 1 second charge time",
-			"  • Consumes all void energy"
-		};
-		
-		g2.setFont(FontLoader.loadEightgonPlain(12));
-		for (String line : advanced) {
-			if (line.isEmpty()) {
-				y += lineHeight / 2;
-				continue;
-			}
-			
-			if (line.equals("ADVANCED ABILITIES")) {
-				g2.setFont(FontLoader.loadTrenchThin(28));
-				g2.setColor(new Color(255, 100, 200));
-			} else if (!line.startsWith("  ")) {
-				g2.setFont(FontLoader.loadTrenchThin(18));
-				g2.setColor(new Color(0, 255, 200));
-				
-				FontMetrics fm = g2.getFontMetrics();
-				int textWidth = fm.stringWidth(line);
-				g2.drawRect(leftX - 10, y - 20, textWidth + 20, 30);
-			} else {
-				g2.setFont(FontLoader.loadEightgonPlain(12));
-				g2.setColor(new Color(200, 220, 255));
-			}
-			
-			g2.drawString(line, leftX, y);
-			y += lineHeight;
-		}
-	}
-
-	private void drawBackArrow(Graphics2D g2, int x, int y, boolean hovered) {
-		int size = 30;
-		
-		// Arrow background
-		if (hovered) {
-			g2.setColor(new Color(0, 255, 255, 100));
-			g2.fillRect(x - 5, y - 5, size + 30, size + 10);
-		}
-		
-		// Arrow
-		g2.setColor(hovered ? new Color(0, 255, 255) : new Color(0, 200, 200));
-		g2.setStroke(new BasicStroke(3));
-		
-		// Arrow shape: <-
-		g2.drawLine(x + size, y, x, y + size/2);
-		g2.drawLine(x, y + size/2, x + size, y + size);
-		g2.drawLine(x, y + size/2, x + size + 10, y + size/2);
-		
-		// "BACK" text
-		g2.setFont(FontLoader.loadTrenchThin(16));
-		g2.drawString("BACK", x + size + 20, y + size/2 + 5);
-		
-		g2.setStroke(new BasicStroke(1));
-	}
-
-	private void drawNavigationArrow(Graphics2D g2, int x, int y, boolean isLeft, boolean hovered) {
-		int size = 40;
-		
-		if (hovered) {
-			g2.setColor(new Color(0, 255, 255, 100));
-			g2.fillOval(x - size/2 - 5, y - size/2 - 5, size + 10, size + 10);
-		}
-		
-		// Circle
-		g2.setColor(hovered ? new Color(0, 255, 255) : new Color(0, 200, 200));
-		g2.setStroke(new BasicStroke(3));
-		g2.drawOval(x - size/2, y - size/2, size, size);
-		
-		// Arrow
-		if (isLeft) {
-			// 
-			g2.drawLine(x + 10, y - 12, x - 5, y);
-			g2.drawLine(x - 5, y, x + 10, y + 12);
-		} else {
-			// >
-			g2.drawLine(x - 10, y - 12, x + 5, y);
-			g2.drawLine(x + 5, y, x - 10, y + 12);
-		}
-		
-		g2.setStroke(new BasicStroke(1));
-	}
-
-	private void drawNeonControlPanelPopup(Graphics2D g2) {
-		// Full screen darkened background with grid
-		g2.setColor(new Color(0, 0, 20, 230));
-		g2.fillRect(0, 0, WIDTH, HEIGHT);
-		
-		// Draw grid
-		drawNeonGridOverlay(g2);
-		
-		// Back arrow (top-left)
-		drawBackArrow(g2, 40, 40, hoveredBackArrow);
-		
-		// Title
-		g2.setFont(FontLoader.loadTrenchThin(45));
-		g2.setColor(new Color(255, 0, 150));
-		String title = "[ CONTROL CONFIG ]";
-		FontMetrics titleFm = g2.getFontMetrics();
-		g2.drawString(title, WIDTH/2 - titleFm.stringWidth(title)/2, 80);
-		
-		// Neon underline
-		g2.setColor(new Color(0, 255, 255));
-		g2.setStroke(new BasicStroke(2));
-		g2.drawLine(WIDTH/2 - 250, 95, WIDTH/2 + 250, 95);
-		g2.setStroke(new BasicStroke(1));
-		
-		// Scrollable content area
-		int contentX = 100;
-		int contentY = 130;
-		int contentWidth = WIDTH - 250;
-		int contentHeight = HEIGHT - 200;
-		
-		// Clip content area
-		Shape oldClip = g2.getClip();
-		g2.setClip(contentX, contentY, contentWidth, contentHeight);
-		
-		// Translate for scrolling
-		g2.translate(0, -controlPanelScrollOffset);
-		
-		// Draw content sections
-		int yOffset = contentY;
-		yOffset = drawControlPanelAbilitySection(g2, contentX, yOffset);
-		yOffset += 40;
-		yOffset = drawControlPanelKeyBindingSection(g2, contentX, yOffset);
-		yOffset += 40;
-		yOffset = drawControlPanelFutureSection(g2, contentX, yOffset);
-		
-		// Restore translation and clip
-		g2.translate(0, controlPanelScrollOffset);
-		g2.setClip(oldClip);
-		
-		// Scrollbar
-		drawNeonScrollbar(g2, WIDTH - 130, contentY, contentHeight);
-		
-		// Instructions at bottom
-		g2.setFont(new Font("Courier New", Font.PLAIN, 14));
-		g2.setColor(new Color(0, 255, 200, 150));
-		String hint = "[ Mouse Wheel or Drag Scrollbar to scroll ]  [ ESC or C to close ]";
-		int hintWidth = g2.getFontMetrics().stringWidth(hint);
-		g2.drawString(hint, WIDTH/2 - hintWidth/2, HEIGHT - 30);
-	}
-
-	private int drawControlPanelAbilitySection(Graphics2D g2, int x, int y) {
-		// Section title
-		g2.setFont(FontLoader.loadTrenchThin(28));
-		g2.setColor(new Color(255, 100, 200));
-		g2.drawString(">> ABILITY LOADOUT", x, y);
-		y += 40;
-		
-		g2.setFont(FontLoader.loadEightgonPlain(16));
-		g2.setColor(new Color(200, 220, 255));
-		g2.drawString("Click a slot, then select an ability to equip", x, y);
-		y += 50;
-		
-		// Draw 4 ability slots in a row
-		int slotWidth = 180;
-		int slotHeight = 100;
-		int slotSpacing = 20;
-		int totalWidth = (slotWidth * 4) + (slotSpacing * 3);
-		int startX = x + (WIDTH - 250 - totalWidth) / 2;
-		
-		for (int i = 0; i < 4; i++) {
-			Rectangle bounds = getControlPanelSlotBounds(i);
-			bounds.x = startX + i * (slotWidth + slotSpacing);
-			bounds.y = y;
-			bounds.width = slotWidth;
-			bounds.height = slotHeight;
-			
-			String ability = abilityLoadout.getSlot(i);
-			String key = controlConfig.getKeyName(controlConfig.getKey("ability" + (i + 1)));
-			
-			boolean isSelected = (i == selectedSlot);
-			boolean isHovered = (i == hoveredSlot);
-			
-			// Slot background
-			if (isSelected) {
-				g2.setColor(new Color(0, 255, 255, 80));
-				g2.fillRect(bounds.x - 5, bounds.y - 5, bounds.width + 10, bounds.height + 10);
-			} else if (isHovered) {
-				g2.setColor(new Color(0, 255, 255, 40));
-				g2.fillRect(bounds.x - 5, bounds.y - 5, bounds.width + 10, bounds.height + 10);
-			}
-			
-			g2.setColor(new Color(0, 20, 40, 180));
-			g2.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-			
-			// Neon border
-			g2.setColor(isSelected ? new Color(0, 255, 255) : 
-						isHovered ? new Color(0, 220, 220) : new Color(0, 180, 180));
-			g2.setStroke(new BasicStroke(isSelected ? 3 : 2));
-			g2.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-			
-			// Corner brackets
-			int bracketSize = 12;
-			g2.drawLine(bounds.x, bounds.y, bounds.x + bracketSize, bounds.y);
-			g2.drawLine(bounds.x, bounds.y, bounds.x, bounds.y + bracketSize);
-			g2.drawLine(bounds.x + bounds.width - bracketSize, bounds.y, bounds.x + bounds.width, bounds.y);
-			g2.drawLine(bounds.x + bounds.width, bounds.y, bounds.x + bounds.width, bounds.y + bracketSize);
-			
-			// Key indicator
-			g2.setFont(FontLoader.loadTrenchThin(16));
-			g2.setColor(new Color(255, 200, 0));
-			g2.drawString("[" + key + "]", bounds.x + 10, bounds.y + 25);
-			
-			// Slot label
-			g2.setFont(FontLoader.loadTrenchThin(12));
-			g2.setColor(new Color(150, 150, 180));
-			g2.drawString("SLOT " + (i + 1), bounds.x + 10, bounds.y + bounds.height - 10);
-			
-			// Ability name
-			if (ability != null && !ability.isEmpty()) {
-				g2.setFont(FontLoader.loadTrenchThin(18));
-				g2.setColor(Color.WHITE);
-				String displayName = ability.toUpperCase();
-				FontMetrics fm = g2.getFontMetrics();
-				
-				// Word wrap if needed
-				if (fm.stringWidth(displayName) > bounds.width - 20) {
-					g2.setFont(FontLoader.loadTrenchThin(14));
-					fm = g2.getFontMetrics();
-				}
-				
-				g2.drawString(displayName, 
-					bounds.x + bounds.width/2 - fm.stringWidth(displayName)/2, 
-					bounds.y + bounds.height/2 + 5);
-			} else {
-				g2.setFont(FontLoader.loadEightgonPlain(14));
-				g2.setColor(new Color(100, 100, 120));
-				String emptyText = "< EMPTY >";
-				FontMetrics fm = g2.getFontMetrics();
-				g2.drawString(emptyText, 
-					bounds.x + bounds.width/2 - fm.stringWidth(emptyText)/2, 
-					bounds.y + bounds.height/2 + 5);
-			}
-			
-			g2.setStroke(new BasicStroke(1));
-		}
-		
-		y += slotHeight + 30;
-		
-		// Selection hint
-		if (selectedSlot != -1) {
-			g2.setFont(FontLoader.loadTrenchThin(16));
-			g2.setColor(new Color(255, 200, 0));
-			String hint = "▼ SELECT ABILITY FOR SLOT " + (selectedSlot + 1) + " ▼";
-			FontMetrics fm = g2.getFontMetrics();
-			g2.drawString(hint, x + (WIDTH - 250)/2 - fm.stringWidth(hint)/2, y);
-			y += 40;
-		} else {
-			y += 20;
-		}
-		
-		// Available abilities grid
-		String[] allAbilities = abilityLoadout.getAllAbilities();
-		int abilityBoxWidth = 220;
-		int abilityBoxHeight = 45;
-		int abilitiesPerRow = 3;
-		int abilitySpacing = 15;
-		
-		for (int i = 0; i < allAbilities.length; i++) {
-			int row = i / abilitiesPerRow;
-			int col = i % abilitiesPerRow;
-			
-			Rectangle bounds = getControlPanelAvailableAbilityBounds(i);
-			bounds.x = x + col * (abilityBoxWidth + abilitySpacing);
-			bounds.y = y + row * (abilityBoxHeight + abilitySpacing);
-			bounds.width = abilityBoxWidth;
-			bounds.height = abilityBoxHeight;
-			
-			boolean isHovered = (i == hoveredAbility && selectedSlot != -1);
-			
-			// Background
-			if (isHovered) {
-				g2.setColor(new Color(0, 255, 255, 60));
-				g2.fillRect(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6);
-			}
-			
-			g2.setColor(new Color(0, 20, 40, 150));
-			g2.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-			
-			// Border
-			g2.setColor(isHovered ? new Color(0, 255, 255) : new Color(0, 180, 180));
-			g2.setStroke(new BasicStroke(isHovered ? 2 : 1));
-			g2.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-			g2.setStroke(new BasicStroke(1));
-			
-			// Ability name
-			g2.setFont(FontLoader.loadTrenchThin(16));
-			g2.setColor(isHovered ? Color.WHITE : new Color(200, 220, 255));
-			g2.drawString("• " + allAbilities[i].toUpperCase(), bounds.x + 10, bounds.y + 28);
-		}
-		
-		y += ((allAbilities.length - 1) / abilitiesPerRow + 1) * (abilityBoxHeight + abilitySpacing);
-		
-		return y;
-	}
-
-	private int drawControlPanelKeyBindingSection(Graphics2D g2, int x, int y) {
-		// Section title
-		g2.setFont(FontLoader.loadTrenchThin(28));
-		g2.setColor(new Color(255, 100, 200));
-		g2.drawString(">> KEY BINDINGS", x, y);
-		y += 40;
-		
-		g2.setFont(FontLoader.loadEightgonPlain(16));
-		g2.setColor(new Color(200, 220, 255));
-		g2.drawString("Click a binding to rebind (ESC and ENTER cannot be rebound)", x, y);
-		y += 50;
-		
-		String[] actions = {"ability1", "ability2", "ability3", "ability4", 
-						"shoot", "thrust", "left", "right", "hyper"};
-		String[] labels = {"Ability Slot 1", "Ability Slot 2", "Ability Slot 3", "Ability Slot 4",
-						"Fire Weapon", "Thrust", "Rotate Left", "Rotate Right", "Hyper Mode"};
-		
-		int bindingWidth = 500;
-		int bindingHeight = 50;
-		int bindingSpacing = 10;
-		
-		for (int i = 0; i < actions.length; i++) {
-			Rectangle bounds = getControlPanelKeyConfigBounds(i);
-			bounds.x = x + 50;
-			bounds.y = y;
-			bounds.width = bindingWidth;
-			bounds.height = bindingHeight;
-			
-			String action = actions[i];
-			boolean isConfiguring = waitingForKey && action.equals(configuringAction);
-			boolean isHovered = (i == hoveredKeyConfig);
-			
-			// Background
-			if (isConfiguring) {
-				g2.setColor(new Color(255, 200, 0, 100));
-				g2.fillRect(bounds.x - 5, bounds.y - 5, bounds.width + 10, bounds.height + 10);
-			} else if (isHovered) {
-				g2.setColor(new Color(0, 255, 255, 40));
-				g2.fillRect(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6);
-			}
-			
-			g2.setColor(new Color(0, 20, 40, 180));
-			g2.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-			
-			// Border
-			g2.setColor(isConfiguring ? new Color(255, 200, 0) : 
-						isHovered ? new Color(0, 255, 255) : new Color(0, 180, 180));
-			g2.setStroke(new BasicStroke(isConfiguring ? 3 : 2));
-			g2.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
-			g2.setStroke(new BasicStroke(1));
-			
-			// Label
-			g2.setFont(FontLoader.loadEightgonPlain(16));
-			g2.setColor(new Color(200, 220, 255));
-			g2.drawString(labels[i] + ":", bounds.x + 15, bounds.y + 30);
-			
-			// Key display
-			g2.setFont(new Font("Courier", Font.PLAIN, 18));
-			String keyName = isConfiguring ? "< PRESS KEY >" : 
-							controlConfig.getKeyName(controlConfig.getKey(action));
-			g2.setColor(isConfiguring ? new Color(255, 200, 0) : new Color(0, 255, 100));
-			FontMetrics fm = g2.getFontMetrics();
-			g2.drawString(keyName, bounds.x + bounds.width - fm.stringWidth(keyName) - 15, bounds.y + 30);
-			
-			y += bindingHeight + bindingSpacing;
-		}
-		
-		return y;
-	}
-
-	private int drawControlPanelFutureSection(Graphics2D g2, int x, int y) {
-		// Section title
-		g2.setFont(FontLoader.loadTrenchThin(28));
-		g2.setColor(new Color(255, 100, 200));
-		g2.drawString(">> FUTURE SETTINGS", x, y);
-		y += 40;
-		
-		// Placeholder boxes for future features
-		String[] futureSettings = {
-			"Audio Settings",
-			"Graphics Quality",
-			"Difficulty Mode",
-			"Color Themes",
-			"Accessibility Options"
-		};
-		
-		int boxWidth = 300;
-		int boxHeight = 60;
-		int boxSpacing = 15;
-		
-		for (String setting : futureSettings) {
-			g2.setColor(new Color(20, 20, 40, 150));
-			g2.fillRect(x + 50, y, boxWidth, boxHeight);
-			
-			g2.setColor(new Color(80, 80, 100));
-			g2.setStroke(new BasicStroke(2));
-			g2.drawRect(x + 50, y, boxWidth, boxHeight);
-			g2.setStroke(new BasicStroke(1));
-			
-			// Dashed lines for "coming soon" effect
-			g2.setStroke(new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{5}, 0));
-			g2.setColor(new Color(100, 100, 120));
-			g2.drawRect(x + 55, y + 5, boxWidth - 10, boxHeight - 10);
-			g2.setStroke(new BasicStroke(1));
-			
-			// Text
-			g2.setFont(FontLoader.loadEightgonPlain(16));
-			g2.setColor(new Color(120, 120, 140));
-			g2.drawString(setting, x + 65, y + 30);
-			
-			g2.setFont(FontLoader.loadEightgonItalic(12));
-			g2.setColor(new Color(100, 100, 120));
-			g2.drawString("[ COMING SOON ]", x + 65, y + 50);
-			
-			y += boxHeight + boxSpacing;
-		}
-		
-		return y + 50; // Extra padding at bottom
-	}
-
-	private void drawNeonScrollbar(Graphics2D g2, int x, int y, int height) {
-		int scrollbarWidth = 20;
-		int scrollbarHeight = height;
-		
-		// Scrollbar track
-		g2.setColor(new Color(20, 40, 60, 150));
-		g2.fillRect(x, y, scrollbarWidth, scrollbarHeight);
-		g2.setColor(new Color(0, 180, 180));
-		g2.drawRect(x, y, scrollbarWidth, scrollbarHeight);
-		
-		// Calculate thumb size and position
-		int contentHeight = maxControlPanelScroll + height;
-		float thumbSizeRatio = (float)height / contentHeight;
-		int thumbHeight = Math.max(30, (int)(scrollbarHeight * thumbSizeRatio));
-		
-		float scrollRatio = (float)controlPanelScrollOffset / maxControlPanelScroll;
-		int thumbY = y + (int)((scrollbarHeight - thumbHeight) * scrollRatio);
-		
-		// Scrollbar thumb
-		boolean thumbHovered = hoveredScrollbar;
-		if (thumbHovered || draggingScrollbar) {
-			g2.setColor(new Color(0, 255, 255, 100));
-			g2.fillRect(x - 2, thumbY - 2, scrollbarWidth + 4, thumbHeight + 4);
-		}
-		
-		g2.setColor(new Color(0, 255, 255, 200));
-		g2.fillRect(x + 2, thumbY, scrollbarWidth - 4, thumbHeight);
-		
-		g2.setColor(thumbHovered || draggingScrollbar ? new Color(0, 255, 255) : new Color(0, 220, 220));
-		g2.setStroke(new BasicStroke(2));
-		g2.drawRect(x + 2, thumbY, scrollbarWidth - 4, thumbHeight);
-		g2.setStroke(new BasicStroke(1));
-		
-		// Grip lines
-		g2.setColor(new Color(0, 100, 100));
-		int gripY = thumbY + thumbHeight / 2;
-		for (int i = -1; i <= 1; i++) {
-			g2.drawLine(x + 5, gripY + i * 4, x + scrollbarWidth - 5, gripY + i * 4);
-		}
-	}
-
-	private Rectangle getControlPanelSlotBounds(int slot) {
-		int panelWidth = 700;
-		int panelX = WIDTH / 2 - panelWidth / 2;
-		int slotWidth = 140;
-		int slotHeight = 80;
-		int slotY = HEIGHT / 2 - 175;
-		int spacing = 20;
-		int startX = panelX + 50;
-		return new Rectangle(startX + slot * (slotWidth + spacing), slotY, slotWidth, slotHeight);
-	}
-
-	private Rectangle getControlPanelAvailableAbilityBounds(int index) {
-		int panelWidth = 700;
-		int panelX = WIDTH / 2 - panelWidth / 2;
-		int itemWidth = 180;
-		int itemHeight = 35;
-		int startY = HEIGHT / 2 - 55;
-		int startX = panelX + 50;
-		return new Rectangle(startX, startY + index * (itemHeight + 5), itemWidth, itemHeight);
-	}
-
-	private Rectangle getControlPanelKeyConfigBounds(int index) {
-		int panelWidth = 700;
-		int panelX = WIDTH / 2 - panelWidth / 2;
-		int itemWidth = 260;
-		int itemHeight = 35;
-		int startY = HEIGHT / 2 - 55;
-		int startX = panelX + 390;
-		return new Rectangle(startX, startY + index * (itemHeight + 5), itemWidth, itemHeight);
-	}
-
 	private void activateAbility(int slot) {
 		String ability = abilityLoadout.getSlot(slot);
 		if (ability == null) return;
+
+		ability = ability.toLowerCase();
 		
 		switch (ability) {
 			case "void" -> { 
@@ -3309,49 +2453,28 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     public void keyPressed(KeyEvent e) {
         switch (gameState) {
             case "menu" -> {
-				if (showingControlPanel && waitingForKey && configuringAction != null) {
-					handleControlPanelKeyPress(e.getKeyCode());
+				if (showingSettings) {
+					settingsPanel.handleKeyPress(e.getKeyCode());
+					if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+						showingSettings = false;
+						abilityManager.syncWithLoadout(abilityLoadout, shipLevel);
+						repaint();
+					}
 					return;
 				}
+				
 				int key = e.getKeyCode();
 				switch (key) {
 					case KeyEvent.VK_ENTER -> {
-						if (!showingInstructions && !showingControlPanel) startNewGame();
-					}
-                    case KeyEvent.VK_I -> {
-						if (!showingControlPanel && !waitingForKey) showingInstructions = !showingInstructions;
-					}
-					case KeyEvent.VK_C -> {
-						if (!showingInstructions && !waitingForKey) showingControlPanel = !showingControlPanel;
+						if (!showingStory) startNewGame();
 					}
 					case KeyEvent.VK_ESCAPE -> {
-						if (showingInstructions && !waitingForKey) {
-							showingInstructions = false;
-							instructionPage = 0;
-						}
-						if (showingControlPanel && !waitingForKey) {
-							showingControlPanel = false;
-							configuringAction = null;
-							waitingForKey = false;
-							selectedSlot = -1;
-						}
-						if (waitingForKey) {
-							configuringAction = null;
-							waitingForKey = false;
-						}
-					}
-					case KeyEvent.VK_LEFT -> {
-						if (showingInstructions && instructionPage > 0) {
-							instructionPage--;
-						}
-					}
-					case KeyEvent.VK_RIGHT -> {
-						if (showingInstructions && instructionPage < totalInstructionPages - 1) {
-							instructionPage++;
+						if (showingStory) {
+							showingStory = false;
 						}
 					}
 					case KeyEvent.VK_S -> {
-						if (noSavedGame || showingInstructions || showingControlPanel) break;
+						if (noSavedGame || showingStory) break;
 						resumeGame();
 						gameState = "playing";
                 	}
@@ -3409,7 +2532,12 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
     }
 
     @Override
-    public void keyTyped(KeyEvent e) {}
+    public void keyTyped(KeyEvent e) {
+		if (gameState.equals("menu") && showingStory) {
+			storyTerminal.addChar(e.getKeyChar());
+			return;
+		}
+	}
 
     public static void main(String[] args) {
         JFrame frame = new JFrame("Asteroid Game");

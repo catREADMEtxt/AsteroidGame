@@ -4,7 +4,7 @@ public class ShipLevel {
     private int level = 1;
     private int xp = 0;
     private int xpToNextLevel = 20;
-    
+    /*
     // Ability unlock levels
     private static final int VOID_UNLOCK_LEVEL = 3;
     private static final int FADE_UNLOCK_LEVEL = 5;
@@ -12,7 +12,15 @@ public class ShipLevel {
     private static final int SHIELD_UNLOCK_LEVEL = 9;
     private static final int TIME_SLOW_UNLOCK_LEVEL = 12;
     private static final int DRONE_UNLOCK_LEVEL = 15;
-    private static final int NOVA_UNLOCK_LEVEL = 20;
+    private static final int NOVA_UNLOCK_LEVEL = 20;*/
+
+    private static final int VOID_UNLOCK_LEVEL = 1;
+    private static final int FADE_UNLOCK_LEVEL = 2;
+    private static final int TELEPORT_UNLOCK_LEVEL = 3;
+    private static final int SHIELD_UNLOCK_LEVEL = 4;
+    private static final int TIME_SLOW_UNLOCK_LEVEL = 5;
+    private static final int DRONE_UNLOCK_LEVEL = 6;
+    private static final int NOVA_UNLOCK_LEVEL = 7;
     
     public void addXP(int amount) {
         xp += amount;
@@ -29,7 +37,7 @@ public class ShipLevel {
         // Exponential growth: 20, 30, 45, 68, 102, 153, ...
         return (int)(20 * Math.pow(1.5, level - 1));
     }
-    /*
+    
     public boolean isAbilityUnlocked(String ability) {
         return switch (ability.toLowerCase()) {
             case "void" -> level >= VOID_UNLOCK_LEVEL;
@@ -42,7 +50,7 @@ public class ShipLevel {
             default -> false;
         };
     }
-    */
+    /*
    public boolean isAbilityUnlocked(String ability) {
         return switch (ability.toLowerCase()) {
             case "void" -> true;
@@ -54,7 +62,7 @@ public class ShipLevel {
             case "nova" -> true;
             default -> false;
         };
-    }
+    }*/
     public void drawLevelUI(Graphics2D g2, int screenWidth, int screenHeight) {
         int panelX = 20;
         int panelY = 90;

@@ -263,12 +263,7 @@ public class Ship {
 		// Semicircle parameters
 		int radius = 18;
 		int startAngle = 90; // Start from tip, grow symmetrically upward
-		/*
-		// Draw background arc (empty fuel)
-		g2d.setColor(new Color(40, 40, 40, 150));
-		g2d.setStroke(new BasicStroke(3));
-		g2d.drawArc(-radius, -radius, radius * 2, radius * 2, startAngle, 180);
-		*/
+		
 		// Draw fuel arc (filled)
 		if (arcAngle > 0) {
 			// Start from center (90 degrees) and grow both ways

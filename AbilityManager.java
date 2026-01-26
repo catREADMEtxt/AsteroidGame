@@ -1,4 +1,6 @@
 import java.awt.*;
+import java.util.HashSet;
+import java.util.Set;
 
 public class AbilityManager {
     private static class Ability {
@@ -250,6 +252,30 @@ public class AbilityManager {
     public float getNovaChargePercent() {
         return novaState == NovaState.CHARGING ? (float)novaChargeTimer / novaChargeDuration : 0f;
     }
+
+    public void syncWithLoadout(AbilityLoadout loadout, ShipLevel shipLevel) {
+        // Get all abilities
+        Ability[] allAbilities = {voidAbility, fadeAbility, teleportAbility, 
+                                shieldAbility, timeSlowAbility, droneAbility, novaAbility};
+        
+        // Create a set of equipped ability names
+        Set<String> equippedAbilities = new HashSet<>();
+        for (int i = 0; i < 4; i++) {
+            String abilityName = loadout.getSlot(i);
+            if (abilityName != null && !abilityName.isEmpty()) {
+                equippedAbilities.add(abilityName.toLowerCase());
+            }
+        }
+        
+        // Update unlock status based on both loadout and ship level
+        for (Ability ability : allAbilities) {
+            String abilityName = ability.name.toLowerCase();
+            // Ability is unlocked if it's in the loadout AND the ship has unlocked it
+            boolean isInLoadout = equippedAbilities.contains(abilityName);
+            boolean isUnlockedByShip = shipLevel.isAbilityUnlocked(abilityName);
+            ability.unlocked = isInLoadout && isUnlockedByShip;
+        }
+    }
     
     public void drawAbilityBar(Graphics2D g2d, int screenWidth, int screenHeight, AbilityLoadout loadout) {
         int barWidth = 400;  // Reduced from 600
@@ -275,7 +301,15 @@ public class AbilityManager {
         
         for (int i = 0; i < 4; i++) {
             String abilityName = loadout.getSlot(i);
-            if (abilityName == null) continue;
+
+            if (abilityName == null || abilityName.isEmpty()) {
+                int abilityX = barX + i * abilitySpacing + abilitySpacing / 2;
+                int abilityY = barY + barHeight / 2;
+                drawEmptyAbilityIcon(g2d, abilityX, abilityY);
+                continue;
+            }
+
+            abilityName = abilityName.toLowerCase();
             
             // Find matching ability
             Ability ability = null;
@@ -289,10 +323,38 @@ public class AbilityManager {
             if (ability != null) {
                 int abilityX = barX + i * abilitySpacing + abilitySpacing / 2;
                 int abilityY = barY + barHeight / 2;
-                
                 drawAbilityIcon(g2d, ability, abilityX, abilityY);
+            } else {
+                // Ability not found - draw empty
+                int abilityX = barX + i * abilitySpacing + abilitySpacing / 2;
+                int abilityY = barY + barHeight / 2;
+                drawEmptyAbilityIcon(g2d, abilityX, abilityY);
             }
         }
+    }
+
+    private void drawEmptyAbilityIcon(Graphics2D g2d, int centerX, int centerY) {
+        int iconSize = 45;
+        int x = centerX - iconSize / 2;
+        int y = centerY - iconSize / 2;
+        
+        // Dark background
+        g2d.setColor(new Color(30, 30, 40, 180));
+        g2d.fillOval(x, y, iconSize, iconSize);
+        
+        // Dashed border
+        g2d.setColor(new Color(80, 80, 100));
+        g2d.setStroke(new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 
+                                    10.0f, new float[]{5.0f}, 0.0f));
+        g2d.drawOval(x, y, iconSize, iconSize);
+        g2d.setStroke(new BasicStroke(1));
+        
+        // Empty indicator
+        g2d.setFont(new Font("Arial", Font.ITALIC, 10));
+        g2d.setColor(new Color(100, 100, 120));
+        String emptyText = "EMPTY";
+        FontMetrics fm = g2d.getFontMetrics();
+        g2d.drawString(emptyText, centerX - fm.stringWidth(emptyText)/2, centerY + 4);
     }
     
     private void drawAbilityIcon(Graphics2D g2d, Ability ability, int centerX, int centerY) {
