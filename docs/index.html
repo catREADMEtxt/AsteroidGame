@@ -2,22 +2,55 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>AsteroidGame</title>
+    <title>Asteroid Game - Void Navigator</title>
     <script src="https://cjrtnc.leaningtech.com/4.2/loader.js"></script>
     <style>
-      html, body { margin: 0; height: 100%; }
-      #container { width: 100vw; height: 100vh; }
+      html, body { 
+        margin: 0; 
+        padding: 0;
+        height: 100%; 
+        overflow: hidden;
+        background: #000;
+      }
+      #container { 
+        width: 100vw; 
+        height: 100vh; 
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      #loading {
+        position: absolute;
+        color: #0ff;
+        font-family: 'Courier New', monospace;
+        font-size: 24px;
+        text-align: center;
+      }
     </style>
   </head>
   <body>
-    <div id="container"></div>
+    <div id="container">
+      <div id="loading">Loading Void Navigator OS...</div>
+    </div>
 
     <script type="module">
-      await cheerpjInit();
-      cheerpjCreateDisplay(-1, -1, document.getElementById("container"));
+      try {
+        // Initialize CheerpJ
+        await cheerpjInit();
+        
+        // Hide loading message
+        document.getElementById('loading').style.display = 'none';
+        
+        // Create display
+        cheerpjCreateDisplay(-1, -1, document.getElementById("container"));
 
-      // IMPORTANT: Use relative path so it works on GitHub Project Pages (/repo-name/)
-      await cheerpjRunJar("AsteroidGame.jar");
+        // Run the JAR file
+        await cheerpjRunJar("AsteroidGame.jar");
+      } catch (error) {
+        document.getElementById('loading').innerHTML = 
+          'Error loading game: ' + error.message + '<br>Please refresh the page.';
+        console.error('CheerpJ error:', error);
+      }
     </script>
   </body>
 </html>
