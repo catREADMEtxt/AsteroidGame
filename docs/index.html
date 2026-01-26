@@ -44,8 +44,14 @@
         // Create display
         cheerpjCreateDisplay(-1, -1, document.getElementById("container"));
 
-        // Run the JAR file
-        await cheerpjRunJar("AsteroidGame.jar");
+        // Use GitHub raw URL
+        const username = "catREADMEtxt";  // REPLACE THIS
+        const repo = "AsteroidGame";      // REPLACE THIS
+        const branch = "New-Features";    // REPLACE THIS
+        
+        const jarUrl = `https://raw.githubusercontent.com/${username}/${repo}/${branch}/docs/AsteroidGame.jar`;
+        
+        await cheerpjRunJar(jarUrl);
       } catch (error) {
         document.getElementById('loading').innerHTML = 
           'Error loading game: ' + error.message + '<br>Please refresh the page.';
