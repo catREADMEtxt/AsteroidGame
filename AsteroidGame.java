@@ -160,8 +160,8 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private boolean cosmicEntityDeath;
 	private boolean voidCreatureDeath;
     // Save system
-    private final File saveFile = new File("save.dat");
-    private final File leaderBoardDataFile = new File("leaderBoardData.dat");
+    private final File saveFile = new File("/files/save.dat");
+    private final File leaderBoardDataFile = new File("/files/leaderBoardData.dat");
 	// Control Config
 	private ControlConfig controlConfig;
 	private AbilityLoadout abilityLoadout;
