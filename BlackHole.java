@@ -7,7 +7,7 @@ public class BlackHole {
     private int spawnTimer = 1 * 60;
     private float rotation = 0;
     private float pulse = 0;
-    private final double pullStrength = 0.15;
+    private final double pullStrength = 1;
     private final double pullRadius;
     private final double eventHorizon;
     private boolean fullySpawned = false;

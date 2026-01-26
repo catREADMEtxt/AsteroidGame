@@ -21,7 +21,7 @@ public class StarField {
     
     private final List<Star> stars = new ArrayList<>();
     private final Random rand = new Random();
-    private final int width, height;
+    private int width, height;
     private boolean voidMode = false;
     private double lastShipVX = 0, lastShipVY = 0;
     
@@ -55,6 +55,17 @@ public class StarField {
             if (star.x > width) star.x -= width;
             if (star.y < 0) star.y += height;
             if (star.y > height) star.y -= height;
+        }
+    }
+
+    public void updateDimensions(int newWidth, int newHeight) {
+        this.width = newWidth;
+        this.height = newHeight;
+        
+        // Reposition stars that are now out of bounds
+        for (Star star : stars) {
+            if (star.x > width) star.x = width;
+            if (star.y > height) star.y = height;
         }
     }
     

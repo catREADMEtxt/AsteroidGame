@@ -7,12 +7,14 @@ public class Ship {
     // Constants
     private final int bodyWidth = 12;
 	private final int bodyHeight = 20;
-    private final int universeWidth = 1200;
-	private final int universeHeight = 700;
+
+	// Screen dimensions
+    private int WIDTH = 1200;
+	private int HEIGHT = 700;
 	
     // Position and velocity
-    private double x = universeWidth / 2;
-    private double y = universeHeight / 2;
+    private double x = WIDTH / 2;
+    private double y = HEIGHT / 2;
     private double vx = 0;
     private double vy = 0;
     
@@ -41,54 +43,9 @@ public class Ship {
 	// Fuel
     private double fuel = 500;
 	private final double maxFuel = 1000;
-    	
-	private void drawFuelIndicator(Graphics2D g2d) {
-		double fuelPercent = fuel / maxFuel;
-		
-		// Determine color based on fuel level
-		Color fuelColor;
-		if (fuelPercent > 0.7f) {
-			fuelColor = new Color(0, 255, 100); // Green
-		} else if (fuelPercent > 0.4f) {
-			fuelColor = new Color(255, 200, 0); // Yellow
-		} else if (fuelPercent > 0.2f) {
-			fuelColor = new Color(255, 100, 0); // Orange
-		} else {
-			fuelColor = new Color(255, 0, 0); // Red
-		}
-		
-		// Calculate arc angle (180 degrees max for semicircle)
-		int arcAngle = (int) (360 * fuelPercent);
-		
-		// Semicircle parameters
-		int radius = 18;
-		int startAngle = 90; // Start from tip, grow symmetrically upward
-		/*
-		// Draw background arc (empty fuel)
-		g2d.setColor(new Color(40, 40, 40, 150));
-		g2d.setStroke(new BasicStroke(3));
-		g2d.drawArc(-radius, -radius, radius * 2, radius * 2, startAngle, 180);
-		*/
-		// Draw fuel arc (filled)
-		if (arcAngle > 0) {
-			// Start from center (90 degrees) and grow both ways
-			int leftAngle = 90 + arcAngle / 2;
-			int rightAngle = -arcAngle;
-			
-			g2d.setColor(fuelColor);
-			g2d.setStroke(new BasicStroke(3));
-			g2d.drawArc(-radius, -radius, radius * 2, radius * 2, leftAngle, rightAngle);
-			
-			// Add glow for full fuel
-			if (fuelPercent > 0.9) {
-				g2d.setColor(new Color(0, 255, 100, 100));
-				g2d.setStroke(new BasicStroke(5));
-				g2d.drawArc(-radius, -radius, radius * 2, radius * 2, leftAngle, rightAngle);
-			}
-		}
-		
-		g2d.setStroke(new BasicStroke(1)); // Reset stroke
-	}
+
+	// Animations
+	private ShipTrail trail = new ShipTrail();
 
 	public void applyThrust() {
 	    double multiplier;
@@ -175,9 +132,18 @@ public class Ship {
 	    isThrusting = false; // Reset after each frame unless applyThrust is called again
 	    
 	    //loop universe
-		x = (x + universeWidth) % universeWidth;
-		y = (y + universeHeight) % universeHeight;
+		x = (x + WIDTH) % WIDTH;
+		y = (y + HEIGHT) % HEIGHT;
 
+		// Add trail point
+		if (hyper || voidEnergy.isActive()) {
+			trail.addPoint(x, y, hyper, voidEnergy.isActive());
+		}
+	}
+
+	public void updateDimensions(int newWidth, int newHeight) {
+	    this.WIDTH = newWidth;
+	    this.HEIGHT = newHeight;
 	}
 
 	public Polygon getBounds() {
@@ -274,6 +240,54 @@ public class Ship {
 	    // Undo transformations
 	    g2d.rotate(-angle);
 	    g2d.translate(-x, -y);
+	}
+
+	private void drawFuelIndicator(Graphics2D g2d) {
+		double fuelPercent = fuel / maxFuel;
+		
+		// Determine color based on fuel level
+		Color fuelColor;
+		if (fuelPercent > 0.7f) {
+			fuelColor = new Color(0, 255, 100); // Green
+		} else if (fuelPercent > 0.4f) {
+			fuelColor = new Color(255, 200, 0); // Yellow
+		} else if (fuelPercent > 0.2f) {
+			fuelColor = new Color(255, 100, 0); // Orange
+		} else {
+			fuelColor = new Color(255, 0, 0); // Red
+		}
+		
+		// Calculate arc angle (180 degrees max for semicircle)
+		int arcAngle = (int) (360 * fuelPercent);
+		
+		// Semicircle parameters
+		int radius = 18;
+		int startAngle = 90; // Start from tip, grow symmetrically upward
+		/*
+		// Draw background arc (empty fuel)
+		g2d.setColor(new Color(40, 40, 40, 150));
+		g2d.setStroke(new BasicStroke(3));
+		g2d.drawArc(-radius, -radius, radius * 2, radius * 2, startAngle, 180);
+		*/
+		// Draw fuel arc (filled)
+		if (arcAngle > 0) {
+			// Start from center (90 degrees) and grow both ways
+			int leftAngle = 90 + arcAngle / 2;
+			int rightAngle = -arcAngle;
+			
+			g2d.setColor(fuelColor);
+			g2d.setStroke(new BasicStroke(3));
+			g2d.drawArc(-radius, -radius, radius * 2, radius * 2, leftAngle, rightAngle);
+			
+			// Add glow for full fuel
+			if (fuelPercent > 0.9) {
+				g2d.setColor(new Color(0, 255, 100, 100));
+				g2d.setStroke(new BasicStroke(5));
+				g2d.drawArc(-radius, -radius, radius * 2, radius * 2, leftAngle, rightAngle);
+			}
+		}
+		
+		g2d.setStroke(new BasicStroke(1)); // Reset stroke
 	}
 
 	// --- Fade aura drawing methods ---
@@ -390,6 +404,7 @@ public class Ship {
 	public VoidEnergy getVoidEnergy() { return voidEnergy; }
 	public double getMaxFuel() { return maxFuel; }
 	public boolean getFadeMode() { return fadeMode; }
+	public ShipTrail getTrail() { return trail; }
 	
 	// Modify Values
 	public void setFuel(double newFuel) { fuel = newFuel; }

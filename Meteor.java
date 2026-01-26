@@ -38,6 +38,11 @@ public class Meteor {
         }
     }
 
+    public void updateDimensions(int newWidth, int newHeight) {
+        this.screenWidth = newWidth;
+        this.screenHeight = newHeight;
+    }
+
     // Draw the meteor as a line with fading alpha tail
     public void draw(Graphics2D g2d) {
         // Save original composite

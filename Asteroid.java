@@ -15,6 +15,8 @@ public class Asteroid{
     private final Size size;
     private Polygon shape;
     private static double levelMultiplier;
+    private boolean hitFlash = false;
+    private int hitFlashTimer = 0;
     private static final Random rand = new Random();
 
     public Asteroid(Size size, double x, double y, double vx, double vy) {
@@ -83,10 +85,26 @@ public class Asteroid{
     public void update() {
         x += vx;
         y += vy;
+        
+        if (hitFlash) {
+            hitFlashTimer--;
+            if (hitFlashTimer <= 0) {
+                hitFlash = false;
+            }
+        }
     }
 
     public void draw(Graphics2D g2d) {
         g2d.translate(x, y);
+        
+        if (hitFlash) {
+            // White glow overlay
+            float alpha = hitFlashTimer / 10.0f;
+            g2d.setColor(new Color(255, 255, 255, (int)(200 * alpha)));
+            int glowSize = (int)(getBounds().getBounds().width * 1.5);
+            g2d.fillOval(-glowSize/2, -glowSize/2, glowSize, glowSize);
+        }
+        
         g2d.setColor(Color.LIGHT_GRAY);
         g2d.drawPolygon(shape);
         g2d.translate(-x, -y);
@@ -123,6 +141,11 @@ public class Asteroid{
 	    }
 	    return fragments;
 	}
+
+    public void triggerHitFlash() {
+        hitFlash = true;
+        hitFlashTimer = 10; // 10 frames
+    }
 
     public Polygon getBounds() {
         Polygon moved = new Polygon();

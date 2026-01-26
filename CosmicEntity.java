@@ -24,7 +24,7 @@ public class CosmicEntity {
         size = 20 + rand.nextInt(131);
 
         // Speed inversely proportional to size (0.8-4.0)
-        speed = 4.8 - (size / 150.0 * 4.0);
+        speed = 4.2 - (size / 150.0 * 4.0);
         speed = Math.max(0.8, Math.min(4.0, speed));
 
         // HP based on size
@@ -67,17 +67,26 @@ public class CosmicEntity {
         }
     }
     
-    public void update(double shipX, double shipY) {
-        // Chase the ship
-        updateTarget(shipX, shipY);
+    public void update(double shipX, double shipY, boolean voidActive) {
+        // Only chase the ship when NOT in void
+        if (!voidActive) {
+            updateTarget(shipX, shipY);
+            x += vx;
+            y += vy;
+        }
+        // If in void, don't update position
         
-        x += vx;
-        y += vy;
         pulse += 0.1f;
         tentaclePhase += 0.05f;
     }
 
-    public void updateWithBoids(double shipX, double shipY, java.util.List<CosmicEntity> neighbors) {
+    public void updateWithBoids(double shipX, double shipY, java.util.List<CosmicEntity> neighbors, boolean voidActive) {
+        // Only apply boids when NOT in void
+        if (voidActive) {
+            pulse += 0.1f;
+            tentaclePhase += 0.05f;
+            return;
+        }
         // Tunables
         final double NEIGHBOR_R = 150.0;
         final double SEP_R = 50.0;

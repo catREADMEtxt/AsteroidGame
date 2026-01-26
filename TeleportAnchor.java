@@ -76,6 +76,21 @@ public class TeleportAnchor {
             g2d.setStroke(new BasicStroke(1));
         }
     }
+
+    public void reset() {
+        // Position does not matter when anchor is not placed, but reset anyway
+        anchorX = 0;
+        anchorY = 0;
+
+        // As if an anchor was never placed
+        anchorPlaced = false;
+
+        // No cooldown running
+        cooldownTimer = 0;
+
+        // Reset pulse animation phase
+        pulsePhase = 0f;
+    }
     
     public boolean isAnchorPlaced() { return anchorPlaced; }
     public boolean isOnCooldown() { return cooldownTimer > 0; }

@@ -1,10 +1,26 @@
-import java.awt.*;
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Composite;
+import java.awt.Graphics2D;
+import java.awt.Polygon;
+import java.awt.geom.AffineTransform;
 import java.util.Random;
 
 public class VoidCreature {
+    private static class BodySegment {
+        double x, y;
+        double angle;
+        
+        BodySegment(double x, double y) {
+            this.x = x;
+            this.y = y;
+            this.angle = 0;
+        }
+    }
     private static final Random rand = new Random();
     
-    public enum CreatureType { SERPENT, SPECTER, LEVIATHAN }
+    public enum CreatureType { CENTIPEDE, SPECTER }
     
     private CreatureType type;
     private double x, y;
@@ -15,42 +31,107 @@ public class VoidCreature {
     private int currentHP;
     private float animPhase = 0;
     private float limbPhase = 0;
-    private Color bodyColor;
     private boolean isInVoid;
+    private java.util.List<BodySegment> segments;
+    private double targetAngle = 0;
+    private boolean exitingVoid = false;
+    private int maxSegmentCount;
+    private int screenW, screenH;
+    private static final double SEGMENT_SPACING = 12.0;
+    private double distSinceLastSegment = 0.0;
+    private double desiredAngle = 0.0;
+
+    // radians per update (tune this)
+    private static final double MAX_TURN_RATE = Math.toRadians(2.5);  // ~2.5° per frame
+    // optional: cap random direction change frequency
+    private static final int DIR_CHANGE_COOLDOWN_FRAMES = 45;
+    private int dirCooldown = 0;
     
-    public VoidCreature(int screenWidth, int screenHeight, int level) {
+    private VoidCreature(int screenWidth, int screenHeight, int level) {
+        this.screenW = screenWidth;
+        this.screenH = screenHeight;
+        
         // Spawn from edges
         if (rand.nextBoolean()) {
-            x = rand.nextBoolean() ? -100 : screenWidth + 100;
+            x = rand.nextBoolean() ? -50 : screenWidth + 50;
             y = rand.nextInt(screenHeight);
         } else {
             x = rand.nextInt(screenWidth);
-            y = rand.nextBoolean() ? -100 : screenHeight + 100;
+            y = rand.nextBoolean() ? -50 : screenHeight + 50;
         }
         
-        // Determine type
-        type = CreatureType.values()[rand.nextInt(CreatureType.values().length)];
-        
-        // Size varies (30-100), larger = slower, smaller = faster
-        size = 30 + rand.nextInt(71);
-        
-        // Speed inversely proportional to size (0.5-3.0)
-        speed = 3.5 - (size / 100.0 * 3.0);
-        speed = Math.max(0.5, Math.min(3.0, speed));
-        
-        // HP based on size (small: 50-100, large: 150-300)
-        maxHP = (int)(50 + (size / 100.0) * 250);
-        currentHP = maxHP;
-        
-        // Color based on size (blue for large, red for small)
-        float sizeRatio = (size - 30) / 70.0f;
-        int red = (int)(255 * (1 - sizeRatio)) + 50;
-        int blue = (int)(255 * sizeRatio) + 100;
-        red = Math.max(0, Math.min(255, red));
-        blue = Math.max(0, Math.min(255, blue));
-        bodyColor = new Color(red, 0, blue);
-        
         updateVelocity(screenWidth / 2.0, screenHeight / 2.0);
+    }
+
+    public static VoidCreature createCentipede(int screenWidth, int screenHeight, int level) {
+        VoidCreature vc = new VoidCreature(screenWidth, screenHeight, level);
+        vc.type = CreatureType.CENTIPEDE;
+        vc.size = 80 + vc.rand.nextInt(41);
+        vc.speed = 1.2 + vc.rand.nextDouble() * 0.8;
+        vc.maxHP = 200 + vc.size * 2;
+        vc.currentHP = vc.maxHP;
+        
+        // Set random max segment count
+        vc.maxSegmentCount = 100 + vc.rand.nextInt(51);
+        
+        // Initialize with just the head
+        vc.segments = new java.util.ArrayList<>();
+        
+        // Determine spawn edge and initial direction
+        int edge = vc.rand.nextInt(4); // 0=left, 1=right, 2=top, 3=bottom
+        double startX, startY, initAngle;
+        
+        switch(edge) {
+            case 0 -> {
+                // Left edge
+                startX = -5;
+                startY = vc.rand.nextInt(screenHeight);
+                initAngle = 0; // Move right
+            }
+            case 1 -> {
+                // Right edge
+                startX = screenWidth + 5;
+                startY = vc.rand.nextInt(screenHeight);
+                initAngle = Math.PI; // Move left
+            }
+            case 2 -> {
+                // Top edge
+                startX = vc.rand.nextInt(screenWidth);
+                startY = -5;
+                initAngle = Math.PI / 2; // Move down
+            }
+            default -> {
+                // Bottom edge
+                startX = vc.rand.nextInt(screenWidth);
+                startY = screenHeight + 5;
+                initAngle = -Math.PI / 2; // Move up
+            }
+        }
+        
+        vc.x = startX;
+        vc.y = startY;
+        vc.targetAngle = initAngle;
+        vc.desiredAngle = initAngle;
+        
+        // Create only the head initially
+        BodySegment head = new BodySegment(startX, startY);
+        head.angle = initAngle;
+        vc.segments.add(head);
+        
+        return vc;
+    }
+
+    public static VoidCreature createSpecter(int screenWidth, int screenHeight, int level) {
+        VoidCreature vc = new VoidCreature(screenWidth, screenHeight, level);
+        vc.type = CreatureType.SPECTER;
+        vc.size = 30 + vc.rand.nextInt(71);
+        vc.speed = 3.5 - (vc.size / 100.0 * 3.0);
+        vc.speed = Math.max(0.5, Math.min(3.0, vc.speed));
+        vc.maxHP = (int)(50 + (vc.size / 100.0) * 250);
+        vc.currentHP = vc.maxHP;
+        float sizeRatio = (vc.size - 30) / 70.0f;
+        
+        return vc;
     }
     
     public void updateVelocity(double targetX, double targetY) {
@@ -64,104 +145,172 @@ public class VoidCreature {
         }
     }
     
-    public void update(double shipX, double shipY) {
-        updateVelocity(shipX, shipY);
-        x += vx;
-        y += vy;
-        animPhase += 0.1f;
-        limbPhase += 0.15f;
-    }
-    
-    public void updateWithBoids(double shipX, double shipY, java.util.List<VoidCreature> neighbors) {
-        // Tunables
-        final double NEIGHBOR_R = 150.0;
-        final double SEP_R = 50.0;
-        final double NEIGHBOR_R2 = NEIGHBOR_R * NEIGHBOR_R;
-        final double SEP_R2 = SEP_R * SEP_R;
-
-        double separationX = 0, separationY = 0;
-        double alignmentX = 0, alignmentY = 0;
-        double cohesionX = 0, cohesionY = 0;
-        int count = 0;
-
-        // Optional: cap checks to reduce worst-case time
-        final int MAX_CHECKS = 40;           // try 24–60
-        int checked = 0;
-
-        // Optional: stride sampling to avoid checking every neighbor every time
-        // If neighbors is dense, this is a big win.
-        int step = 1;
-        int n = neighbors.size();
-        if (n > 120) step = 2;
-        if (n > 240) step = 3;
-
-        for (int i = 0; i < n; i += step) {
-            VoidCreature other = neighbors.get(i);
-            if (other == this) continue;
-
-            double dx = other.x - x;
-            double dy = other.y - y;
-            double dist2 = dx * dx + dy * dy;
-
-            if (dist2 < NEIGHBOR_R2) {
-                // Separation only if close; needs invDist
-                if (dist2 < SEP_R2 && dist2 > 1e-9) {
-                    double invDist = 1.0 / Math.sqrt(dist2);
-                    separationX -= dx * invDist;
-                    separationY -= dy * invDist;
-                }
-
-                alignmentX += other.vx;
-                alignmentY += other.vy;
-
-                cohesionX += other.x;
-                cohesionY += other.y;
-
-                count++;
-
-                if (++checked >= MAX_CHECKS) break;
+    public void update(double shipX, double shipY, boolean voidActive) {
+        if (type == CreatureType.CENTIPEDE) {
+            updateCentipede();
+        } else {
+            // Specters only chase when void is active
+            if (voidActive) {
+                updateVelocity(shipX, shipY);
+                x += vx;
+                y += vy;
             }
         }
-
-        if (count > 0) {
-            double invCount = 1.0 / count;
-            alignmentX *= invCount;
-            alignmentY *= invCount;
-            cohesionX = (cohesionX * invCount) - x;
-            cohesionY = (cohesionY * invCount) - y;
-        }
-
-        // Prey on player (avoid sqrt if you can tolerate approximate normalization)
-        double preyX = shipX - x;
-        double preyY = shipY - y;
-        double preyDist2 = preyX * preyX + preyY * preyY;
-        if (preyDist2 > 1e-9) {
-            double invPreyDist = 1.0 / Math.sqrt(preyDist2);
-            preyX *= invPreyDist;
-            preyY *= invPreyDist;
-        }
-
-        // Combine behaviors
-        double ax = (separationX * 1.5 + alignmentX * 1.0 + cohesionX * 0.01 + preyX * 2.0);
-        double ay = (separationY * 1.5 + alignmentY * 1.0 + cohesionY * 0.01 + preyY * 2.0);
-
-        // Scale into desired speed band (keeps motion stable)
-        vx = ax * speed / 4.0;
-        vy = ay * speed / 4.0;
-
-        // Limit speed using squared magnitude (one sqrt only if needed)
-        double v2 = vx * vx + vy * vy;
-        double s2 = speed * speed;
-        if (v2 > s2 && v2 > 1e-12) {
-            double invV = 1.0 / Math.sqrt(v2);
-            vx *= speed * invV;
-            vy *= speed * invV;
-        }
-
-        x += vx;
-        y += vy;
         animPhase += 0.1f;
-        limbPhase += 0.15f;
+        limbPhase += 0.1f;
+    }
+
+    private void updateCentipede() {
+        if (segments == null || segments.isEmpty()) return;
+        // Random direction changes (only when not exiting)
+        if (!exitingVoid) {
+            if (dirCooldown > 0) dirCooldown--;
+
+            // Occasionally pick a new desired angle (but don’t instantly snap)
+            if (dirCooldown == 0 && rand.nextInt(90) == 0) {
+                // Small-ish change instead of fully random (looks more organic)
+                double jitter = rand.nextDouble() * Math.toRadians(60); // +/- 60°
+                desiredAngle = wrapAngle(desiredAngle + jitter);
+
+                dirCooldown = DIR_CHANGE_COOLDOWN_FRAMES;
+            }
+        }
+        // Smoothly steer targetAngle toward desiredAngle
+        double turnRate = exitingVoid ? MAX_TURN_RATE * 1.8 : MAX_TURN_RATE;
+        targetAngle = turnToward(targetAngle, desiredAngle, turnRate);
+        
+        // Move head
+        double headSpeed = exitingVoid ? speed * 2 : speed;
+        double oldHeadX = segments.get(0).x;
+        double oldHeadY = segments.get(0).y;
+        
+        double newHeadX = oldHeadX + headSpeed * Math.cos(targetAngle);
+        double newHeadY = oldHeadY + headSpeed * Math.sin(targetAngle);
+        
+        // Update head position
+        segments.get(0).x = newHeadX;
+        segments.get(0).y = newHeadY;
+        
+        // Calculate head angle
+        double dx = newHeadX - oldHeadX;
+        double dy = newHeadY - oldHeadY;
+        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+            segments.get(0).angle = Math.atan2(dy, dx);
+        }
+        
+        // Wrap head if it crosses screen boundary
+        if (!exitingVoid) wrapSegment(segments.get(0));
+
+        // Accumulate head travel distance (how far the head moved this frame)
+        double headMoveDist = Math.sqrt(dx * dx + dy * dy);
+        distSinceLastSegment += headMoveDist;
+
+        // Grow body while entering / roaming (not exiting)
+        if (!exitingVoid && segments.size() < maxSegmentCount) {
+
+            // Add as many as needed to maintain spacing
+            while (distSinceLastSegment >= SEGMENT_SPACING && segments.size() < maxSegmentCount) {
+
+                // Insert new segment at the previous head position (or slightly behind it)
+                BodySegment newSeg = new BodySegment(oldHeadX, oldHeadY);
+                newSeg.angle = segments.get(0).angle;
+
+                // Insert right after head so the chain starts forming immediately
+                segments.add(1, newSeg);
+
+                distSinceLastSegment -= SEGMENT_SPACING;
+            }
+        }
+        
+        // Update body segments to follow
+        for (int i = 1; i < segments.size(); i++) {
+            BodySegment current = segments.get(i);
+            BodySegment prev = segments.get(i - 1);
+            
+            dx = prev.x - current.x;
+            dy = prev.y - current.y;
+            
+            // Handle wrapping discontinuity
+            if (Math.abs(dx) > screenW / 2) {
+                dx = dx > 0 ? dx - screenW : dx + screenW;
+            }
+            if (Math.abs(dy) > screenH / 2) {
+                dy = dy > 0 ? dy - screenH : dy + screenH;
+            }
+            
+            double dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 0.1) {
+                double ratio = SEGMENT_SPACING / dist;
+                current.x = prev.x - dx * ratio;
+                current.y = prev.y - dy * ratio;
+                current.angle = Math.atan2(dy, dx);
+                
+                // Wrap this segment if needed
+                if (!exitingVoid) wrapSegment(current);
+            }
+        }
+        
+        // Update centipede position to head
+        x = segments.get(0).x;
+        y = segments.get(0).y;
+        
+        // Remove tail segments that go offscreen when exiting
+        if (exitingVoid) {
+            segments.removeIf(seg -> 
+                seg.x < -100 || seg.x > screenW + 100 || 
+                seg.y < -100 || seg.y > screenH + 100
+            );
+        }
+    }
+
+    private static double wrapAngle(double a) {
+        // Normalize to (-PI, PI]
+        while (a <= -Math.PI) a += 2 * Math.PI;
+        while (a > Math.PI) a -= 2 * Math.PI;
+        return a;
+    }
+
+    private static double turnToward(double current, double target, double maxStep) {
+        double delta = wrapAngle(target - current);
+        if (delta > maxStep) delta = maxStep;
+        else if (delta < -maxStep) delta = -maxStep;
+        return wrapAngle(current + delta);
+    }
+    
+    private void wrapSegment(BodySegment seg) {
+        if (seg.x < 0) seg.x += screenW;
+        else if (seg.x > screenW) seg.x -= screenW;
+        
+        if (seg.y < 0) seg.y += screenH;
+        else if (seg.y > screenH) seg.y -= screenH;
+    }
+
+    public void startExitingVoid() {
+        if (type != CreatureType.CENTIPEDE) return;
+        if (exitingVoid) return;
+
+        exitingVoid = true;
+
+        // Head towards nearest screen edge
+        double toLeft = x;
+        double toRight = screenW - x;
+        double toTop = y;
+        double toBottom = screenH - y;
+
+        double min = Math.min(Math.min(toLeft, toRight), Math.min(toTop, toBottom));
+
+        if (min == toLeft) targetAngle = Math.PI;
+        else if (min == toRight) targetAngle = 0;
+        else if (min == toTop) targetAngle = -Math.PI / 2;
+        else targetAngle = Math.PI / 2;
+    }
+
+    public boolean isFullyOffscreen() {
+        if (type != CreatureType.CENTIPEDE) return true;
+        
+        // Centipede is fully gone when all segments are deleted
+        return segments.isEmpty();
     }
     
     public void takeDamage(int damage) {
@@ -176,17 +325,25 @@ public class VoidCreature {
     public boolean intersects(Polygon shipBounds) {
         if (!isInVoid) return false;
         
-        // Different collision radii based on type
-        int collisionRadius = switch(type) {
-            case SERPENT -> (int)(size * 1.2); // Longer body
-            case SPECTER -> (int)(size * 0.7); // Just the bell/core
-            case LEVIATHAN -> (int)(size * 1.5); // Massive body
-        };
+        if (type == CreatureType.CENTIPEDE) {
+            for (BodySegment seg : segments) {
+                for (int i = 0; i < shipBounds.npoints; i++) {
+                    double dx = shipBounds.xpoints[i] - seg.x;
+                    double dy = shipBounds.ypoints[i] - seg.y;
+                    if (Math.sqrt(dx * dx + dy * dy) < 8) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
         
+        // Specter collision
+        int collisionRadius = (int)(size * 0.7);
         for (int i = 0; i < shipBounds.npoints; i++) {
             double dx = shipBounds.xpoints[i] - x;
             double dy = shipBounds.ypoints[i] - y;
-            if (Math.sqrt(dx * dx + dy * dy) < collisionRadius) {
+            if (Math.sqrt(dx * dx + dy * dy) < collisionRadius/2) {
                 return true;
             }
         }
@@ -197,22 +354,21 @@ public class VoidCreature {
         isInVoid = voidMode;
         
         if (!voidMode) {
-            // Background mode - ghostly, no threat
             drawGhostly(g2d);
         } else {
-            // Active mode - threatening
             drawActive(g2d);
         }
     }
     
     private void drawGhostly(Graphics2D g2d) {
         Composite old = g2d.getComposite();
-        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f));
         
-        switch (type) {
-            case SERPENT -> drawSerpent(g2d, 40);
-            case SPECTER -> drawSpecter(g2d, 40);
-            case LEVIATHAN -> drawLeviathan(g2d, 40);
+        if (type == CreatureType.CENTIPEDE) {
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.25f));
+            drawCentipede(g2d, 80);
+        } else {
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f));
+            drawSpecter(g2d, 40);
         }
         
         g2d.setComposite(old);
@@ -220,74 +376,13 @@ public class VoidCreature {
     
     private void drawActive(Graphics2D g2d) {
         switch (type) {
-            case SERPENT -> drawSerpent(g2d, 255);
+            case CENTIPEDE -> drawCentipede(g2d, 255);
             case SPECTER -> drawSpecter(g2d, 255);
-            case LEVIATHAN -> drawLeviathan(g2d, 255);
         }
         
-        // HP bar
-        drawHPBar(g2d);
-    }
-
-    private void drawSerpent(Graphics2D g2d, int baseAlpha) {
-        // Serpentine eel-like creature - dark purple
-        int segments = 6; // Reduced from 12
-        double bodyLength = size * 2.0;
-        
-        for (int i = 0; i < segments; i++) {
-            double segPhase = animPhase + i * 0.5;
-            double t = i / (double)segments;
-            
-            // Sine wave swimming motion
-            double offsetX = size * 0.3 * Math.sin(segPhase);
-            double offsetY = size * 0.2 * Math.cos(segPhase * 0.8);
-            
-            int segX = (int)(x + offsetX - t * bodyLength);
-            int segY = (int)(y + offsetY);
-            
-            // Tapered body
-            double taper = Math.sin(t * Math.PI);
-            int segSize = (int)(size * taper);
-            if (segSize < 3) continue;
-            
-            int alpha = Math.max(0, Math.min(255, baseAlpha - i * (baseAlpha / 8)));
-            
-            // Dark purple gradient for serpent
-            int red = Math.max(0, Math.min(255, (int)(80 + 50 * t)));
-            int green = Math.max(0, Math.min(255, (int)(20 + 30 * (1-t))));
-            int blue = Math.max(0, Math.min(255, (int)(120 + 60 * taper)));
-            
-            // Body segment
-            g2d.setColor(new Color(red, green, blue, alpha));
-            g2d.fillOval(segX - segSize/2, segY - segSize/2, segSize, segSize);
-            
-            // Simple fin every 2 segments
-            if (i % 2 == 0 && i > 0 && i < segments - 1) {
-                int finHeight = (int)(size * 0.4);
-                int[] finX = {segX, segX - 6, segX + 6};
-                int[] finY = {segY - segSize/2 - finHeight, segY - segSize/2, segY - segSize/2};
-                
-                int finAlpha = Math.max(0, Math.min(255, alpha / 2));
-                g2d.setColor(new Color(red, green, blue, finAlpha));
-                g2d.fillPolygon(finX, finY, 3);
-            }
+        if (type != CreatureType.CENTIPEDE) {
+            drawHPBar(g2d);
         }
-        
-        // Head with glowing eyes
-        int headSize = (int)(size * 0.9);
-        int headRed = Math.max(0, Math.min(255, 100));
-        int headGreen = Math.max(0, Math.min(255, 30));
-        int headBlue = Math.max(0, Math.min(255, 150));
-        
-        g2d.setColor(new Color(headRed, headGreen, headBlue, baseAlpha));
-        g2d.fillOval((int)x - headSize/2, (int)y - headSize/2, headSize, headSize);
-        
-        // Glowing eyes
-        int eyeOffset = size / 4;
-        int eyeAlpha = Math.max(0, Math.min(255, (int)(baseAlpha * 0.9)));
-        g2d.setColor(new Color(255, 100, 255, eyeAlpha));
-        g2d.fillOval((int)x - eyeOffset - 3, (int)y - eyeOffset - 3, 6, 6);
-        g2d.fillOval((int)x + eyeOffset - 3, (int)y - eyeOffset - 3, 6, 6);
     }
 
     private void drawSpecter(Graphics2D g2d, int baseAlpha) {
@@ -323,12 +418,12 @@ public class VoidCreature {
         }
         
         // Flowing tentacles - reduced complexity
-        int tentacles = 6; // Reduced from 8
+        int tentacles = 8; 
         for (int i = 0; i < tentacles; i++) {
             double baseAngle = (2 * Math.PI * i / tentacles);
             
-            // Only 3 segments instead of 6
-            for (int seg = 0; seg < 3; seg++) {
+            // Segmented tentacles
+            for (int seg = 0; seg < 5; seg++) {
                 double segPhase = limbPhase + i * 0.4 + seg * 0.3;
                 double sway = Math.sin(segPhase) * 0.4;
                 double angle = baseAngle + sway;
@@ -362,115 +457,192 @@ public class VoidCreature {
         g2d.fillOval((int)x - coreSize/2, (int)y - coreSize/2, coreSize, coreSize);
     }
 
-    private void drawLeviathan(Graphics2D g2d, int baseAlpha) {
-        // Massive dragon/manta ray hybrid - deep purple
-        double neckCurve = Math.sin(animPhase) * 0.3;
+    private void drawCentipede(Graphics2D g2d, int baseAlpha) {
+        if (segments == null || segments.isEmpty()) return;
         
-        // Main body - deep purple
-        int bodyWidth = size * 2;
-        int bodyHeight = (int)(size * 1.2);
-        int bodyRed = Math.max(0, Math.min(255, 60));
-        int bodyGreen = Math.max(0, Math.min(255, 10));
-        int bodyBlue = Math.max(0, Math.min(255, 100));
-        int bodyAlpha = Math.max(0, Math.min(255, baseAlpha));
-        
-        g2d.setColor(new Color(bodyRed, bodyGreen, bodyBlue, bodyAlpha));
-        g2d.fillOval((int)x - bodyWidth/2, (int)y - bodyHeight/2, bodyWidth, bodyHeight);
-        
-        // Simplified scales - 3x6 grid instead of 5x8
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 6; j++) {
-                int scaleX = (int)(x - bodyWidth/2 + j * (bodyWidth/5.0));
-                int scaleY = (int)(y - bodyHeight/2 + i * (bodyHeight/2.0));
-                int scaleAlpha = Math.max(0, Math.min(255, baseAlpha / 2));
+        // Draw from tail to head so head appears on top
+        for (int i = segments.size() - 1; i >= 0; i--) {
+            BodySegment seg = segments.get(i);
+            
+            // Save transform
+            AffineTransform oldTransform = g2d.getTransform();
+            g2d.translate(seg.x, seg.y);
+            g2d.rotate(seg.angle);
+            
+            // Calculate segment size (larger in middle)
+            double segmentRatio = 1.0 - Math.abs((i / (double)segments.size()) - 0.5) * 0.3;
+            int segWidth = (int)(20 * segmentRatio);  // Increased from 16
+            int segLength = 16;  // Increased from 14
+            
+            int alpha = Math.max(0, Math.min(255, baseAlpha));
+            
+            // Draw legs FIRST (so they appear under the body)
+            if (i > 0 && i % 3 == 0) {  // Draw legs every 3 segments
+                double legPhase = limbPhase + i * 0.4;
                 
-                int scaleRed = Math.max(0, Math.min(255, 90));
-                int scaleGreen = Math.max(0, Math.min(255, 30));
-                int scaleBlue = Math.max(0, Math.min(255, 130));
+                // Left side legs
+                drawLongerTopDownLeg(g2d, -segWidth/2 - 2, -4, legPhase, true, alpha);
+                drawLongerTopDownLeg(g2d, -segWidth/2 - 2, 4, legPhase + 0.5, true, alpha);
                 
-                g2d.setColor(new Color(scaleRed, scaleGreen, scaleBlue, scaleAlpha));
-                g2d.fillOval(scaleX - 4, scaleY - 4, 8, 8);
+                // Right side legs
+                drawLongerTopDownLeg(g2d, segWidth/2 + 2, -4, legPhase + Math.PI, false, alpha);
+                drawLongerTopDownLeg(g2d, segWidth/2 + 2, 4, legPhase + Math.PI + 0.5, false, alpha);
             }
-        }
-        
-        // Simplified neck - 3 segments instead of 5
-        for (int i = 0; i < 3; i++) {
-            double t = i / 2.0;
-            int neckX = (int)(x + bodyWidth/2 + t * size * 0.6);
-            int neckY = (int)(y - bodyHeight/4 + neckCurve * size * t);
-            int neckSize = (int)(size * (0.8 - t * 0.3));
             
-            g2d.setColor(new Color(bodyRed, bodyGreen, bodyBlue, bodyAlpha));
-            g2d.fillOval(neckX - neckSize/2, neckY - neckSize/2, neckSize, neckSize);
-        }
-        
-        // Head
-        int headX = (int)(x + bodyWidth/2 + size * 0.6);
-        int headY = (int)(y - bodyHeight/4 + neckCurve * size);
-        int headSize = (int)(size * 0.8);
-        
-        int headRed = Math.max(0, Math.min(255, 80));
-        int headGreen = Math.max(0, Math.min(255, 20));
-        int headBlue = Math.max(0, Math.min(255, 120));
-        int headAlpha = Math.max(0, Math.min(255, baseAlpha));
-        
-        g2d.setColor(new Color(headRed, headGreen, headBlue, headAlpha));
-        g2d.fillOval(headX - headSize/2, headY - headSize/2, headSize, headSize);
-        
-        // Horns
-        int[] hornX1 = {headX - headSize/4, headX - headSize/3, headX - headSize/4};
-        int[] hornY1 = {headY - headSize/2, headY - headSize, headY - headSize/3};
-        int[] hornX2 = {headX + headSize/4, headX + headSize/3, headX + headSize/4};
-        int[] hornY2 = {headY - headSize/2, headY - headSize, headY - headSize/3};
-        
-        g2d.setColor(new Color(bodyRed, bodyGreen, bodyBlue, bodyAlpha));
-        g2d.fillPolygon(hornX1, hornY1, 3);
-        g2d.fillPolygon(hornX2, hornY2, 3);
-        
-        // Glowing eye
-        int eyeAlpha = Math.max(0, Math.min(255, baseAlpha));
-        g2d.setColor(new Color(255, 100, 255, eyeAlpha));
-        g2d.fillOval(headX + headSize/6, headY - headSize/6, headSize/4, headSize/4);
-        
-        // Simplified tail - 3 segments instead of 4
-        int tailX = (int)(x - bodyWidth/2);
-        double tailSway = Math.sin(animPhase * 1.5) * size * 0.5;
-        
-        for (int i = 0; i < 3; i++) {
-            double t = i / 2.0;
-            int segX = (int)(tailX - i * (size/3.0));
-            int segY = (int)(y + tailSway * t);
-            int segSize = (int)(size * (0.8 - t * 0.5));
+            // Main body segment with darker colors
+            Color segmentColor = new Color(
+                Math.max(0, Math.min(255, 45 + (i % 2) * 8)),
+                Math.max(0, Math.min(255, 35 + (i % 2) * 6)),
+                Math.max(0, Math.min(255, 55 + (i % 2) * 10)),
+                alpha
+            );
+            g2d.setColor(segmentColor);
+            g2d.fillOval(-segWidth/2, -segLength/2, segWidth, segLength);
             
-            g2d.setColor(new Color(bodyRed, bodyGreen, bodyBlue, bodyAlpha));
-            g2d.fillOval(segX - segSize/2, segY - segSize/2, segSize, segSize);
-            
-            // Spine on tail
-            if (i > 0) {
-                int spineHeight = size/4;
-                int[] spineX = {segX, segX - 4, segX + 4};
-                int[] spineY = {segY - segSize/2 - spineHeight, segY - segSize/2, segY - segSize/2};
-                g2d.fillPolygon(spineX, spineY, 3);
+            // Minimal purple accent stripes (every 10th segment)
+            if (i % 10 == 0) {
+                Color accentColor = new Color(90, 40, 120, alpha / 2);
+                g2d.setColor(accentColor);
+                g2d.setStroke(new BasicStroke(1.5f));
+                g2d.drawArc(-segWidth/2 + 2, -segLength/2 + 2, segWidth - 4, segLength - 4, 0, 360);
             }
+            
+            // Exoskeleton plates
+            Color plateColor = new Color(
+                Math.max(0, Math.min(255, 65)),
+                Math.max(0, Math.min(255, 55)),
+                Math.max(0, Math.min(255, 75)),
+                alpha
+            );
+            g2d.setColor(plateColor);
+            g2d.setStroke(new BasicStroke(1.5f));
+            
+            // Outer shell edge
+            g2d.drawOval(-segWidth/2, -segLength/2, segWidth, segLength);
+            
+            // Inner segment lines for texture
+            g2d.setStroke(new BasicStroke(1f));
+            g2d.drawArc(-segWidth/2 + 2, -segLength/2 + 2, segWidth - 4, segLength - 4, 0, 180);
+            g2d.drawArc(-segWidth/2 + 2, -segLength/2 + 2, segWidth - 4, segLength - 4, 180, 180);
+            
+            // Joint line between segments
+            if (i < segments.size() - 1) {
+                g2d.setColor(new Color(30, 25, 40, alpha));
+                g2d.setStroke(new BasicStroke(1.5f));
+                g2d.drawLine(-segWidth/2, -segLength/2 + 1, segWidth/2, -segLength/2 + 1);
+            }
+            
+            // Restore transform
+            g2d.setTransform(oldTransform);
         }
         
-        // Simplified fins - 4 instead of 6
+        // Draw head separately
+        BodySegment head = segments.get(0);
+        
+        AffineTransform oldTransform = g2d.getTransform();
+        g2d.translate(head.x, head.y);
+        g2d.rotate(head.angle);
+        
+        // Head body - larger
+        g2d.setColor(new Color(55, 45, 65, baseAlpha));
+        g2d.fillOval(-14, -12, 28, 24);
+        
+        // Subtle purple glow on head
+        g2d.setColor(new Color(100, 50, 130, baseAlpha / 3));
+        g2d.fillOval(-16, -14, 32, 28);
+        
+        // Head exoskeleton ridges
+        g2d.setColor(new Color(75, 65, 85, baseAlpha));
+        g2d.setStroke(new BasicStroke(2));
+        g2d.drawOval(-14, -12, 28, 24);
+        g2d.drawArc(-12, -10, 24, 20, 20, 140);
+        
+        // Mandibles (same as before)
+        int[][] mouthparts = {
+            {-8, 10, -12, 18},
+            {-4, 10, -7, 16},
+            {4, 10, 7, 16},
+            {8, 10, 12, 18}
+        };
+        
+        g2d.setColor(new Color(85, 75, 95, baseAlpha));
+        g2d.setStroke(new BasicStroke(2f));
+        for (int[] mp : mouthparts) {
+            g2d.drawLine(mp[0], mp[1], mp[2], mp[3]);
+            int[] tipX = {mp[2], mp[2] - 2, mp[2] + 2};
+            int[] tipY = {mp[3] + 2, mp[3], mp[3]};
+            g2d.fillPolygon(tipX, tipY, 3);
+        }
+        
+        // Antennae (same as before)
         for (int i = 0; i < 4; i++) {
-            double finPhase = limbPhase + i * Math.PI / 2;
-            int finY = (int)(y + (i < 2 ? -size/2 : size/2));
-            int finLength = (int)(size * 0.5 + size * 0.2 * Math.sin(finPhase));
+            double tentacleBaseAngle = (i < 2) ? -Math.PI/4 : Math.PI/4;
+            if (i % 2 == 1) tentacleBaseAngle += (i < 2 ? -0.3 : 0.3);
             
-            int finX = (int)(x - bodyWidth/3 + i * (bodyWidth/3.0));
-            int finEndX = finX + (i % 2 == 0 ? -finLength : finLength);
-            int finEndY = (int)(finY + finLength * 0.3 * Math.sin(finPhase));
+            double tentaclePhase = animPhase + i * 0.5;
+            double sway = 4 * Math.sin(tentaclePhase);
             
-            int[] finXPoints = {finX, finEndX, finX};
-            int[] finYPoints = {finY - size/12, finEndY, finY + size/12};
+            int baseX = (int)(8 * Math.cos(tentacleBaseAngle));
+            int baseY = -8;
+            int tipX = (int)(baseX + sway + 12 * Math.cos(tentacleBaseAngle));
+            int tipY = (int)(baseY - 12);
             
-            int finAlpha = Math.max(0, Math.min(255, baseAlpha / 2));
-            g2d.setColor(new Color(bodyRed, bodyGreen, bodyBlue, finAlpha));
-            g2d.fillPolygon(finXPoints, finYPoints, 3);
+            g2d.setColor(new Color(75, 65, 85, baseAlpha / 2));
+            g2d.setStroke(new BasicStroke(1.5f));
+            g2d.drawLine(baseX, baseY, tipX, tipY);
+            g2d.fillOval(tipX - 2, tipY - 2, 4, 4);
         }
+        
+        g2d.setStroke(new BasicStroke(1));
+        g2d.setTransform(oldTransform);
+    }
+
+    private void drawLongerTopDownLeg(Graphics2D g2d, int startX, int startY, double phase, boolean isLeft, int alpha) {
+        // Three-section leg extending outward from body (longer)
+        double extension = 18 + 8 * Math.sin(phase); // Increased extension
+        double angle = isLeft ? -Math.PI/2.5 : Math.PI/2.5;
+        
+        // Add wave motion to angle
+        angle += Math.sin(phase) * 0.4;
+        
+        // First section (from body) - longer
+        int mid1X = (int)(startX + extension * 0.4 * Math.cos(angle));
+        int mid1Y = (int)(startY + extension * 0.4 * Math.sin(angle));
+        
+        // Second section (middle joint)
+        double secondAngle = angle + (isLeft ? -0.3 : 0.3) + Math.sin(phase + 1) * 0.2;
+        int mid2X = (int)(mid1X + extension * 0.35 * Math.cos(secondAngle));
+        int mid2Y = (int)(mid1Y + extension * 0.35 * Math.sin(secondAngle));
+        
+        // Third section (tip)
+        double thirdAngle = secondAngle + (isLeft ? -0.2 : 0.2);
+        int tipX = (int)(mid2X + extension * 0.25 * Math.cos(thirdAngle));
+        int tipY = (int)(mid2Y + extension * 0.25 * Math.sin(thirdAngle));
+        
+        g2d.setColor(new Color(60, 50, 70, Math.max(0, Math.min(255, alpha - 30))));
+        g2d.setStroke(new BasicStroke(2.5f));
+        
+        // First segment
+        g2d.drawLine(startX, startY, mid1X, mid1Y);
+        
+        // First joint
+        g2d.fillOval(mid1X - 2, mid1Y - 2, 4, 4);
+        
+        // Second segment
+        g2d.setStroke(new BasicStroke(2f));
+        g2d.drawLine(mid1X, mid1Y, mid2X, mid2Y);
+        
+        // Second joint
+        g2d.fillOval(mid2X - 2, mid2Y - 2, 4, 4);
+        
+        // Third segment (thinnest)
+        g2d.setStroke(new BasicStroke(1.5f));
+        g2d.drawLine(mid2X, mid2Y, tipX, tipY);
+        
+        // Foot
+        g2d.fillOval(tipX - 2, tipY - 2, 4, 4);
+        
+        g2d.setStroke(new BasicStroke(1));
     }
     
     private void drawHPBar(Graphics2D g2d) {
@@ -500,6 +672,9 @@ public class VoidCreature {
     }
     
     public int getSizeValue() {
+        // Centipede doesn't count toward size limits
+        if (type == CreatureType.CENTIPEDE) return 0;
+        
         // Returns size value for spawn management (1-3 based on size)
         if (size < 50) return 1;
         if (size < 75) return 2;
@@ -509,4 +684,5 @@ public class VoidCreature {
     public double getX() { return x; }
     public double getY() { return y; }
     public int getSize() { return size; }
+    public CreatureType getType() { return type; }
 }

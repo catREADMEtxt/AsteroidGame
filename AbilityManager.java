@@ -49,13 +49,15 @@ public class AbilityManager {
         float getCooldownPercent() { return onCooldown ? (float)cooldownTimer / maxCooldown : 0f; }
     }
     
-    private Ability voidAbility;
-    private Ability fadeAbility;
-    private Ability teleportAbility;
-    private Ability shieldAbility;
-    private Ability timeSlowAbility;
-    private Ability droneAbility;
-    private Ability novaAbility;
+    private final Ability voidAbility;
+    private final Ability fadeAbility;
+    private final Ability teleportAbility;
+    private final Ability shieldAbility;
+    private final Ability timeSlowAbility;
+    private final Ability droneAbility;
+    private final Ability novaAbility;
+
+    private final double DEFAULT_FLASH_TIMER = 0.5 * 60;
     
     // Shield Burst fields
     private boolean shieldActive = false;
@@ -477,6 +479,51 @@ public class AbilityManager {
             
             g2d.setStroke(new BasicStroke(1));
         }
+    }
+
+    private void resetAbility(Ability a) {
+        if (a == null) return;
+
+        a.unlocked = false;
+        a.active = false;
+
+        a.onCooldown = false;
+        a.cooldownTimer = 0;
+
+        a.drawFlash = false;
+        a.flashTimer = DEFAULT_FLASH_TIMER;
+    }
+
+    // --- Public reset: restores AbilityManager to initial state ---
+    public void reset() {
+        // Abilities
+        resetAbility(voidAbility);
+        resetAbility(fadeAbility);
+        resetAbility(teleportAbility);
+        resetAbility(shieldAbility);
+        resetAbility(timeSlowAbility);
+        resetAbility(droneAbility);
+        resetAbility(novaAbility);
+
+        // Shield Burst fields
+        shieldActive = false;
+        shieldDuration = 0;
+        shieldRadius = 0;
+
+        // Time Slow fields
+        timeSlowActive = false;
+        timeSlowDuration = 0;
+
+        // Drone fields
+        droneDeployed = false;
+        droneOrbitAngle = 0;
+        droneHealth = 3;
+        droneFireTimer = 0;
+        droneSize = 12;
+        droneHitInvulnTimer = 3 * 60;
+
+        // Nova Blast fields
+        resetNova();
     }
     
     // Getters and setters
