@@ -64,7 +64,7 @@
         console.log("jar bytes", buf.byteLength);
         
         console.log("about to run jar");
-        await cheerpjRunJar(resolved);
+        await cheerpjRunJar("./AsteroidGame.jar");
         console.log("jar launched");
       } catch (error) {
         document.getElementById('loading').innerHTML = 
