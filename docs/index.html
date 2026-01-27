@@ -36,8 +36,10 @@
     <script type="module">
       try {
         // Initialize CheerpJ
+        console.log("about to init");
         await cheerpjInit();
-        
+        console.log("init done");
+
         // Hide loading message
         document.getElementById('loading').style.display = 'none';
         
@@ -50,8 +52,11 @@
         const branch = "New-Features";    // REPLACE THIS
         
         const jarUrl = `https://cdn.jsdelivr.net/gh/${username}/${repo}@${branch}/docs/AsteroidGame.jar`;
+        console.log("jarUrl =", jarUrl);
         
+        console.log("about to run jar");
         await cheerpjRunJar(jarUrl);
+        console.log("jar launched");
       } catch (error) {
         document.getElementById('loading').innerHTML = 
           'Error loading game: ' + error.message + '<br>Please refresh the page.';
