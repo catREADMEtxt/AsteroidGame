@@ -54,9 +54,18 @@
         
         const jarUrl = `AsteroidGame.jar`;
         console.log("jarUrl =", jarUrl);
+
+        const resolved = new URL(jarUrl, import.meta.url).toString();
+        console.log("resolved jarUrl =", resolved);
+
+        const r = await fetch(resolved, { cache: "no-store" });
+        console.log("fetch status", r.status, r.statusText, "type", r.type);
+        console.log("content-type", r.headers.get("content-type"));
+        const buf = await r.arrayBuffer();
+        console.log("jar bytes", buf.byteLength);
         
         console.log("about to run jar");
-        await cheerpjRunJar(jarUrl);
+        await cheerpjRunJar(resolved);
         console.log("jar launched");
       } catch (error) {
         document.getElementById('loading').innerHTML = 
