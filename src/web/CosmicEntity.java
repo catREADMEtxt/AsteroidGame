@@ -79,6 +79,102 @@ public class CosmicEntity {
         pulse += 0.1f;
         tentaclePhase += 0.05f;
     }
+
+    public void updateWithBoids(double shipX, double shipY, java.util.List<CosmicEntity> neighbors, boolean voidActive) {
+        // Only apply boids when NOT in void
+        if (voidActive) {
+            pulse += 0.1f;
+            tentaclePhase += 0.05f;
+            return;
+        }
+        // Tunables
+        final double NEIGHBOR_R = 150.0;
+        final double SEP_R = 50.0;
+        final double NEIGHBOR_R2 = NEIGHBOR_R * NEIGHBOR_R;
+        final double SEP_R2 = SEP_R * SEP_R;
+
+        double separationX = 0, separationY = 0;
+        double alignmentX = 0, alignmentY = 0;
+        double cohesionX = 0, cohesionY = 0;
+        int count = 0;
+
+        // Optional: cap checks to reduce worst-case time
+        final int MAX_CHECKS = 40;           // try 24–60
+        int checked = 0;
+
+        // Optional: stride sampling to avoid checking every neighbor every time
+        // If neighbors is dense, this is a big win.
+        int step = 1;
+        int n = neighbors.size();
+        if (n > 120) step = 2;
+        if (n > 240) step = 3;
+
+        for (int i = 0; i < n; i += step) {
+            CosmicEntity other = neighbors.get(i);
+            if (other == this) continue;
+
+            double dx = other.x - x;
+            double dy = other.y - y;
+            double dist2 = dx * dx + dy * dy;
+
+            if (dist2 < NEIGHBOR_R2) {
+                // Separation only if close; needs invDist
+                if (dist2 < SEP_R2 && dist2 > 1e-9) {
+                    double invDist = 1.0 / Math.sqrt(dist2);
+                    separationX -= dx * invDist;
+                    separationY -= dy * invDist;
+                }
+
+                alignmentX += other.vx;
+                alignmentY += other.vy;
+
+                cohesionX += other.x;
+                cohesionY += other.y;
+
+                count++;
+
+                if (++checked >= MAX_CHECKS) break;
+            }
+        }
+
+        if (count > 0) {
+            double invCount = 1.0 / count;
+            alignmentX *= invCount;
+            alignmentY *= invCount;
+            cohesionX = (cohesionX * invCount) - x;
+            cohesionY = (cohesionY * invCount) - y;
+        }
+
+        // Prey on player (avoid sqrt if you can tolerate approximate normalization)
+        double preyX = shipX - x;
+        double preyY = shipY - y;
+        double preyDist2 = preyX * preyX + preyY * preyY;
+        if (preyDist2 > 1e-9) {
+            double invPreyDist = 1.0 / Math.sqrt(preyDist2);
+            preyX *= invPreyDist;
+            preyY *= invPreyDist;
+        }
+
+        // Combine behaviors
+        double ax = (separationX * 1.5 + alignmentX * 1.0 + cohesionX * 0.01 + preyX * 2.0);
+        double ay = (separationY * 1.5 + alignmentY * 1.0 + cohesionY * 0.01 + preyY * 2.0);
+
+        // Scale into desired speed band (keeps motion stable)
+        vx = ax * speed / 4.0;
+        vy = ay * speed / 4.0;
+
+        // Limit speed using squared magnitude (one sqrt only if needed)
+        double v2 = vx * vx + vy * vy;
+        double s2 = speed * speed;
+        if (v2 > s2 && v2 > 1e-12) {
+            double invV = 1.0 / Math.sqrt(v2);
+            vx *= speed * invV;
+            vy *= speed * invV;
+        }
+
+        x += vx;
+        y += vy;
+    }
     
     public boolean isNearShip(Polygon shipBounds) {
         if (isInVoid) return false;

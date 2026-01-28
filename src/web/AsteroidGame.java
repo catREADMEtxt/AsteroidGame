@@ -2,7 +2,6 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.font.GlyphVector;
 import java.awt.geom.Point2D;
-import java.awt.image.BufferStrategy;
 import java.io.*;
 import java.util.*;
 import java.util.List;
@@ -10,7 +9,6 @@ import javax.swing.*;
 import javax.swing.Timer;
 
 public final class AsteroidGame extends JPanel implements ActionListener, KeyListener {
-	// ====== Game State & Logic ======
     // Alpha Fades and Timers
     private int level;
 	private ShipLevel shipLevel;
@@ -49,11 +47,8 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	private final List<BlackHole> blackHolesToRemove = new ArrayList<>();
 	private final List<CosmicEntity> cosmicEntitiesToRemove = new ArrayList<>();
 	private final List<VoidCreature> creaturesToRemove = new ArrayList<>();
-	private final ArrayList<VoidCreature> vcNeighbors = new ArrayList<>(128);
-	private final ArrayList<CosmicEntity> ceNeighbors = new ArrayList<>(128);
-	private static final int BOIDS_CELL = 150;
 	
-	// ====== Asthetics & Rendering ======
+	// ====== Asthetics ======
 	private final GalaxyBackground galaxyBackground;
 	private final SpaceGrid spaceGrid;
 	private final List<Meteor> meteors;
@@ -64,9 +59,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	// Death screen animation fields
 	private int deathExplosionFrame;
 	private boolean deathExplosionDone = false;    
-	// Canvas for BufferStrategy
-	private BufferStrategy strategy;
-    private Canvas canvas;
     
 	// ====== Ship ======
 	// ------ Thrust ------
@@ -151,23 +143,15 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		}
 
 		setPreferredSize(new Dimension(WIDTH, HEIGHT));
-		setLayout(new BorderLayout()); // Important for Canvas
-		
-		// Create canvas for BufferStrategy
-		canvas = new Canvas();
-		canvas.setIgnoreRepaint(true);
-		canvas.setFocusable(false);
-		add(canvas, BorderLayout.CENTER);
-		
 		setFocusable(true);
-		requestFocusInWindow();
 
 		setupMenu();
 		addKeyListener(this);
-		
+
 		addComponentListener(new java.awt.event.ComponentAdapter() {
 			public void componentResized(java.awt.event.ComponentEvent e) {
 				updateDimensions();
+				repaint();
 			}
 		});
 
@@ -223,15 +207,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		showingStory = false;
 	}
 
-	public void initBufferStrategy() {
-		canvas.createBufferStrategy(2); // Double buffering
-		strategy = canvas.getBufferStrategy();
-		// Initial render to prevent black screen
-		if (strategy != null) {
-			render();
-		}
-	}
-
     void setupMenu() {
 		setLayout(null);
 		setBackground(Color.BLACK);
@@ -247,7 +222,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						(HEIGHT - (int)(HEIGHT * 0.75)) / 2,
 						(int)(WIDTH * 0.85),
 						(int)(HEIGHT * 0.75));
-					render();
+					repaint();
 				}
 			}
 			
@@ -274,7 +249,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						showingSettings = false;
 						abilityManager.syncWithLoadout(abilityLoadout, shipLevel);
 					}
-					render();
+					repaint();
 					return;
 				}
 				
@@ -303,7 +278,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					storyTerminal = new StoryTerminal(); // Reset story each time
 				}
 				
-				render();
+				repaint();
 			}
 		});
 		
@@ -317,7 +292,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				
 				if (showingSettings) {
 					settingsPanel.handleMouseMove(mx, my);
-					render();
+					repaint();
 					return;
 				}
 				
@@ -337,7 +312,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						my >= HEIGHT/2 + 190 && my <= HEIGHT/2 + 240) {
 					hoveredButton = 3; // Story
 				}
-				render();
+				repaint();
 			}
 			
 			@Override
@@ -348,7 +323,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						(HEIGHT - (int)(HEIGHT * 0.75)) / 2,
 						(int)(WIDTH * 0.85),
 						(int)(HEIGHT * 0.75));
-					render();
+					repaint();
 				}
 			}
 		});
@@ -361,7 +336,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					(HEIGHT - (int)(HEIGHT * 0.75)) / 2,
 					(int)(WIDTH * 0.85),
 					(int)(HEIGHT * 0.75));
-				render();
+				repaint();
 			}
 		});
 	}
@@ -387,7 +362,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		catch (IOException e) { e.printStackTrace(); }
 
 	    revalidate();
-	    render();
+	    repaint();
 	    requestFocusInWindow();
 	}
 
@@ -472,7 +447,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 		cosmicEntities.clear();
 		voidCreatures.clear();
 		voidHazards.clear();
-	    render();
+	    repaint();
 	}
 
 	public void updateDimensions() {
@@ -568,7 +543,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				if (storyTerminal.isExitRequested()) {
 					showingStory = false;
 				}
-				render();
+				repaint();
         		return;
             }
             case "playing" -> {
@@ -876,7 +851,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 				if (!hazardsToAdd.isEmpty()) {
 					voidHazards.addAll(hazardsToAdd);
 				}
-				
+								
 				// Update void creatures 
 				for (VoidCreature vc : voidCreatures) {
 					vc.update(ship.getX(), ship.getY(), ship.getVoidEnergy().isActive());
@@ -1434,7 +1409,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
                 cosmicEntitiesToRemove.clear();
 				creaturesToRemove.clear();
             	
-            	render();
+            	repaint();
             }
             case "death" -> {
                 deathCountdown--;
@@ -1456,9 +1431,9 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
             default -> {
             }
         }
-	    render();
+	    repaint();
 	}
-	/*
+	
 	@Override
 	protected void paintComponent(Graphics g) {
 	    super.paintComponent(g);
@@ -1865,443 +1840,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
             default -> {
             }
         }
-	}*/
-
-	private void render() {
-		if (strategy == null) return; // Not initialized yet
-		
-		do {
-			do {
-				Graphics2D g2d = (Graphics2D) strategy.getDrawGraphics();
-				
-				try {
-					// Set rendering hints for better web performance
-					g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, 
-										RenderingHints.VALUE_ANTIALIAS_OFF);
-					g2d.setRenderingHint(RenderingHints.KEY_RENDERING, 
-										RenderingHints.VALUE_RENDER_SPEED);
-					g2d.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, 
-										RenderingHints.VALUE_COLOR_RENDER_SPEED);
-					
-					// Get current canvas size
-					int width = canvas.getWidth();
-					int height = canvas.getHeight();
-
-					// Don't render if canvas isn't ready
-					if (width <= 0 || height <= 0) {
-						return;
-					}
-					
-					// Drawing code from paintComponent
-					switch (gameState) {
-						case "menu" -> {
-							// Galaxy background
-							galaxyBackground.draw(g2d, WIDTH, HEIGHT);
-							
-							// Draw starfield
-							starField.draw(g2d);
-							
-							// Neon grid overlay
-							drawNeonGridOverlay(g2d);
-							
-							// Title with chromatic aberration effect
-							drawNeonTitle(g2d);
-							
-							if (showingStory) {
-								// Draw story terminal (full screen)
-								storyTerminal.draw(g2d, WIDTH, HEIGHT);
-							} else if (showingSettings) {
-								settingsPanel.draw(g2d, controlConfig, abilityLoadout);
-							} else {
-								// Buttons
-								drawNeonMenuButton(g2d, "NEW GAME", HEIGHT/2 - 20, hoveredButton == 0, true);
-								drawNeonMenuButton(g2d, "RESUME", HEIGHT/2 + 50, hoveredButton == 1, !noSavedGame);
-								drawNeonMenuButton(g2d, "SETTINGS", HEIGHT/2 + 120, hoveredButton == 2, true);
-								drawNeonMenuButton(g2d, "STORY", HEIGHT/2 + 190, hoveredButton == 3, true);
-								
-								// Error message
-								if (noSavedGame) {
-									g2d.setFont(new Font("Courier New", Font.PLAIN, 24));
-									int pulse = (int)(200 + 55 * Math.sin(System.currentTimeMillis() / 200.0));
-									
-									// Neon glow effect
-									g2d.setColor(new Color(255, 0, 100, pulse / 3));
-									String errorMessage = "⚠ NO SAVED PROGRESS FOUND";
-									int errorX = WIDTH / 2 - g2d.getFontMetrics().stringWidth(errorMessage) / 2;
-									g2d.drawString(errorMessage, errorX - 2, HEIGHT/2 - 50 - 2);
-									g2d.drawString(errorMessage, errorX + 2, HEIGHT/2 - 50 + 2);
-									
-									g2d.setColor(new Color(0, 255, 255, pulse));
-									g2d.drawString(errorMessage, errorX, HEIGHT/2 - 50);
-								}
-							}
-						}
-						case "playing" -> {
-							// Background
-							if (ship.getVoidEnergy().isActive()) {
-								drawGradientBackground(g2d, 
-									new Color(20, 5, 40), 
-									new Color(40, 10, 60)
-								);
-							} else {
-								drawGradientBackground(g2d, 
-									new Color(5, 5, 15), 
-									new Color(15, 10, 25)
-								);
-							}
-							// Galaxy background
-							galaxyBackground.draw(g2d, WIDTH, HEIGHT);
-							
-							// Space grid
-							spaceGrid.draw(g2d, WIDTH, HEIGHT, asteroids, blackHoles);
-							
-							// Ship trail (before ship)
-							ship.getTrail().draw(g2d);
-							
-							// Draw screen overlays (simulate ship's HUD/window)
-							if (fadeActive) {
-								drawFadeScreenOverlay(g2d);
-							} else if (ship.getVoidEnergy().isActive()) {
-								drawVoidScreenOverlay(g2d);
-							}
-							
-							// Draw void hazards
-							for (VoidHazard vh : voidHazards) { vh.draw(g2d, ship.getVoidEnergy().isActive()); }
-
-							// Draw void creatures
-							for (VoidCreature vc : voidCreatures) { vc.draw(g2d, ship.getVoidEnergy().isActive()); }
-
-							// Draw black holes
-							for (BlackHole bh : blackHoles) { bh.draw(g2d); }
-
-							// Draw cosmic entities
-							for (CosmicEntity ce : cosmicEntities) { ce.draw(g2d, ship.getVoidEnergy().isActive()); }
-							
-							// Draw starfield
-							starField.draw(g2d);
-							
-							// Draw particles
-							particleSystem.draw(g2d);
-
-							//Draw teleport anchor
-							teleportAnchor.drawAnchor(g2d);
-
-							// Draw shield effect
-							abilityManager.drawShieldEffect(g2d, ship.getX(), ship.getY());
-
-							// Draw time slow effect
-							abilityManager.drawTimeSlowEffect(g2d, WIDTH, HEIGHT);
-
-							// Draw drone
-							abilityManager.drawDrone(g2d, ship.getX(), ship.getY());
-
-							// Draw nova blast
-							abilityManager.drawNovaBlast(g2d, WIDTH, HEIGHT, ship.getX(), ship.getY());
-
-							// Draw floating texts
-							floatingTextManager.draw(g2d);
-
-							// Draw ability bar
-							abilityManager.drawAbilityBar(g2d, WIDTH, HEIGHT, abilityLoadout);
-
-							// Draw level UI
-							shipLevel.drawLevelUI(g2d, WIDTH, HEIGHT);
-
-							// Draw teleport flash
-							if (teleportFlashFrame > 0) { teleportAnchor.drawTeleportFlash(g2d, WIDTH, HEIGHT, teleportFlashFrame); }
-
-							// Draw level up effect
-							if (showingLevelUp) { shipLevel.drawLevelUpEffect(g2d, (int) ship.getX(), (int) ship.getY(), WIDTH, HEIGHT, levelUpFrame); }
-
-							// Draw asteroids with enhanced effects
-							if (ship.getVoidEnergy().isActive()) {
-								g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.3f));
-							}
-							for (Asteroid a : asteroids) { 
-								a.draw(g2d);
-								
-								// Add glow to asteroids in void mode
-								if (ship.getVoidEnergy().isActive()) {
-									Rectangle bounds = a.getBounds().getBounds();
-									int glowSize = bounds.width + 10;
-									g2d.setColor(new Color(100, 0, 150, 30));
-									g2d.fillOval(
-										bounds.x + bounds.width / 2 - glowSize / 2,
-										bounds.y + bounds.height / 2 - glowSize / 2,
-										glowSize, glowSize
-									);
-								}
-							}
-							if (ship.getVoidEnergy().isActive()) {
-								g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
-							}
-
-							// Draw ship
-							ship.draw(g2d);
-
-							// Draw bullets
-							if (ship.getVoidEnergy().isActive()) {
-								g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.3f));
-							}
-							for (Bullet b : bullets) { 
-								b.draw(g2d); 
-							}
-							if (ship.getVoidEnergy().isActive()) {
-								g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
-							}
-
-							// Draw void lasers
-							for (VoidLaser laser : voidLasers) {
-								laser.draw(g2d);
-							}
-							
-							// Enhanced HUD
-							drawEnhancedHUD(g2d);
-							
-							// Level starting countdown
-							if (levelStarting) {
-								drawLevelTransition(g2d);
-							}
-							
-							// Animated void overlay effect
-							if (ship.getVoidEnergy().isActive()) {
-								// Animated void overlay with wave effect
-								long time = System.currentTimeMillis();
-								for (int i = 0; i < HEIGHT; i += 10) {
-									int waveOffset = (int) (Math.sin((i + time / 50.0) / 20.0) * 5);
-									int alpha = 50 + (int) (Math.sin((i + time / 100.0) / 15.0) * 20);
-									
-									// Clamp alpha to valid range
-									alpha = Math.max(0, Math.min(255, alpha));
-									
-									g2d.setColor(new Color(80, 0, 120, alpha));
-									g2d.fillRect(0, i + waveOffset, WIDTH, 10);
-								}
-							}
-						}
-						case "paused" -> {
-							// Dark overlay
-							g2d.setColor(new Color(0, 0, 0, 200));
-							g2d.fillRect(0, 0, WIDTH, HEIGHT);
-							
-							// Centered panel
-							int panelWidth = 400;
-							int panelHeight = 300;
-							int panelX = WIDTH / 2 - panelWidth / 2;
-							int panelY = HEIGHT / 2 - panelHeight / 2;
-							
-							g2d.setColor(new Color(20, 25, 40, 250));
-							g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
-							
-							g2d.setColor(new Color(100, 150, 255));
-							g2d.setStroke(new BasicStroke(2));
-							g2d.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
-							g2d.setStroke(new BasicStroke(1));
-							
-							// Title
-							Font pausedFont = new Font("Arial", Font.BOLD, 40);
-							g2d.setFont(pausedFont);
-							g2d.setColor(new Color(150, 200, 255));
-							String pausedText = "PAUSED";
-							FontMetrics pfm = g2d.getFontMetrics();
-							g2d.drawString(pausedText, WIDTH / 2 - pfm.stringWidth(pausedText) / 2, panelY + 80);
-							
-							// Stats
-							g2d.setFont(new Font("Arial", Font.PLAIN, 16));
-							g2d.setColor(new Color(200, 200, 220));
-							int statsY = panelY + 140;
-							
-							String[] stats = {
-								"Level: " + level,
-								"Score: " + score,
-								"Fuel: " + (int)ship.getFuel(),
-								"Ship Level: " + shipLevel.getLevel()
-							};
-							
-							for (String stat : stats) {
-								FontMetrics fm = g2d.getFontMetrics();
-								g2d.drawString(stat, WIDTH / 2 - fm.stringWidth(stat) / 2, statsY);
-								statsY += 25;
-							}
-							
-							// Resume instruction
-							Font resumeFont = new Font("Arial", Font.PLAIN, 15);
-							g2d.setFont(resumeFont);
-							g2d.setColor(new Color(150, 200, 255));
-							String resumeText = "Press ESC to Resume";
-							FontMetrics metrics = g2d.getFontMetrics(resumeFont);
-							g2d.drawString(resumeText, WIDTH / 2 - metrics.stringWidth(resumeText) / 2, panelY + panelHeight - 40);
-							String menuText = "Press ENTER to Return to Menu";
-							FontMetrics menuMetrics = g2d.getFontMetrics(resumeFont);
-							g2d.drawString(menuText, WIDTH / 2 - menuMetrics.stringWidth(menuText) / 2, panelY + panelHeight - 15);
-						}
-						case "death" -> {
-							// Dark gradient background
-							drawGradientBackground(g2d, 
-								new Color(20, 5, 10), 
-								new Color(40, 10, 20)
-							);
-							
-							// Draw particles (explosion debris)
-							particleSystem.draw(g2d);
-							
-							// Flashing red overlay for first second
-							if (deathCountdown > 4 * 60) {
-								int flashAlpha = (int) (100 * Math.sin((5 * 60 - deathCountdown) * 0.5));
-								// Clamp alpha to valid range
-								flashAlpha = Math.max(0, Math.min(255, flashAlpha));
-								g2d.setColor(new Color(255, 0, 0, flashAlpha));
-								g2d.fillRect(0, 0, WIDTH, HEIGHT);
-							}
-							
-							// "YOU DIED" with dramatic effect
-							g2d.setFont(new Font("Serif", Font.BOLD, 90));
-							FontMetrics deathFm = g2d.getFontMetrics();
-							String deathText = "YOU DIED";
-							int deathTextX = WIDTH / 2 - deathFm.stringWidth(deathText) / 2;
-							int deathTextY = HEIGHT / 4;
-							
-							// Glitch effect for first 2 seconds
-							if (deathCountdown > 3 * 60) {
-								int glitchOffset = rand.nextInt(10) - 5;
-								g2d.setColor(new Color(255, 0, 0, 100));
-								g2d.drawString(deathText, deathTextX + glitchOffset, deathTextY);
-								g2d.setColor(new Color(0, 255, 255, 100));
-								g2d.drawString(deathText, deathTextX - glitchOffset, deathTextY);
-							}
-							
-							// Main death text with shadow
-							g2d.setColor(new Color(100, 0, 0));
-							g2d.drawString(deathText, deathTextX + 4, deathTextY + 4);
-							g2d.setColor(new Color(255, 50, 50));
-							g2d.drawString(deathText, deathTextX, deathTextY);
-							
-							// Death cause with color coding
-							g2d.setFont(new Font("Serif", Font.PLAIN, 28));
-							FontMetrics causeFm = g2d.getFontMetrics();
-							
-							String deathCause;
-							Color causeColor;
-							if (voidDeath) {
-								deathCause = "CONSUMED BY THE VOID";
-								causeColor = new Color(180, 0, 255);
-							} else if (bulletDeath) {
-								deathCause = "FRIENDLY FIRE";
-								causeColor = new Color(255, 200, 0);
-							} else if (asteroidDeath) {
-								deathCause = "ASTEROID IMPACT";
-								causeColor = new Color(150, 150, 150);
-							} else if (voidHazardDeath) {
-								deathCause = "CONSUMED BY VOID HAZARD";
-								causeColor = new Color(180, 0, 255);
-							} else if (blackHoleDeath) {
-								deathCause = "CONSUMED BY BLACK HOLE";
-								causeColor = new Color(0, 0, 0);
-							} else if (cosmicEntityDeath) {
-								deathCause = "CONSUMED BY COSMIC ENTITY";
-								causeColor = new Color(255, 0, 255);
-							} else {
-								deathCause = "UNKNOWN CAUSE";
-								causeColor = new Color(200, 200, 200);
-							}
-							
-							int causeX = WIDTH / 2 - causeFm.stringWidth(deathCause) / 2;
-							int causeY = deathTextY + 60;
-							
-							// Cause with glow
-							for (int i = 3; i > 0; i--) {
-								g2d.setColor(new Color(causeColor.getRed(), causeColor.getGreen(), causeColor.getBlue(), 30));
-								g2d.drawString(deathCause, causeX - i, causeY - i);
-								g2d.drawString(deathCause, causeX + i, causeY + i);
-							}
-							g2d.setColor(causeColor);
-							g2d.drawString(deathCause, causeX, causeY);
-							
-							// Stats panel with improved styling
-							int panelY = HEIGHT / 2 + 20;
-							int panelWidth = 500;
-							int panelHeight = 250;
-							int panelX = WIDTH / 2 - panelWidth / 2;
-							
-							// Panel background with border
-							g2d.setColor(new Color(30, 20, 40, 200));
-							g2d.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
-							g2d.setColor(new Color(150, 100, 200));
-							g2d.setStroke(new BasicStroke(2));
-							g2d.drawRoundRect(panelX, panelY, panelWidth, panelHeight, 15, 15);
-							g2d.setStroke(new BasicStroke(1));
-							
-							// Stats header
-							g2d.setFont(new Font("Serif", Font.BOLD, 26));
-							g2d.setColor(new Color(200, 180, 255));
-							String statsHeader = "MISSION STATISTICS";
-							int headerWidth = g2d.getFontMetrics().stringWidth(statsHeader);
-							g2d.drawString(statsHeader, WIDTH / 2 - headerWidth / 2, panelY + 35);
-							
-							// Separator line
-							g2d.setColor(new Color(150, 100, 200));
-							g2d.drawLine(panelX + 30, panelY + 50, panelX + panelWidth - 30, panelY + 50);
-							
-							// Stats content
-							g2d.setFont(new Font("Monospaced", Font.PLAIN, 18));
-							int statsStartY = panelY + 80;
-							int lineSpacing = 30;
-							
-							String[][] stats = {
-								{"Final Score:", String.valueOf(score), "255, 215, 0"},
-								{"Large Destroyed:", String.valueOf(largeDestroyed), "255, 100, 100"},
-								{"Medium Destroyed:", String.valueOf(mediumDestroyed), "100, 255, 100"},
-								{"Small Destroyed:", String.valueOf(smallDestroyed), "100, 200, 255"},
-								{"Fuel Remaining:", String.valueOf((int) ship.getFuel()), "255, 150, 50"}
-							};
-							
-							for (int i = 0; i < stats.length; i++) {
-								String label = stats[i][0];
-								String value = stats[i][1];
-								String[] rgb = stats[i][2].split(", ");
-								Color valueColor = new Color(
-									Integer.parseInt(rgb[0]), 
-									Integer.parseInt(rgb[1]), 
-									Integer.parseInt(rgb[2])
-								);
-								
-								int y = statsStartY + i * lineSpacing;
-								
-								// Label
-								g2d.setColor(new Color(180, 180, 200));
-								g2d.drawString(label, panelX + 40, y);
-								
-								// Value with highlight
-								FontMetrics statsFm = g2d.getFontMetrics();
-								int labelWidth = statsFm.stringWidth(label);
-								g2d.setColor(valueColor);
-								g2d.drawString(value, panelX + 40 + labelWidth + 10, y);
-							}
-							
-							// Countdown timer at bottom
-							g2d.setFont(new Font("Serif", Font.PLAIN, 20));
-							int secondsLeft = deathCountdown / 60 + 1;
-							String countdown = "Returning in " + secondsLeft + "s (Press ENTER to skip)";
-							FontMetrics countdownFm = g2d.getFontMetrics();
-							
-							// Pulsing countdown
-							float pulseAlpha = 0.5f + (float) Math.sin(deathCountdown * 0.1) * 0.3f;
-							g2d.setColor(new Color(200, 200, 200, (int) (255 * pulseAlpha)));
-							g2d.drawString(countdown, 
-								WIDTH / 2 - countdownFm.stringWidth(countdown) / 2, 
-								HEIGHT - 60);
-						}
-						default -> {
-						}
-					}
-					
-				} finally {
-					g2d.dispose();
-				}
-			} while (strategy.contentsRestored());
-			
-			strategy.show();
-		} while (strategy.contentsLost());
 	}
 
 	private void drawNeonGridOverlay(Graphics2D g2) {
@@ -2856,7 +2394,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 						showingSettings = false;
 						abilityManager.syncWithLoadout(abilityLoadout, shipLevel);
-						render();
+						repaint();
 					}
 					return;
 				}
@@ -2869,8 +2407,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 					case KeyEvent.VK_ESCAPE -> {
 						if (showingStory) {
 							showingStory = false;
-						} else {
-							System.exit(0);
 						}
 					}
 					case KeyEvent.VK_S -> {
@@ -2905,7 +2441,7 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 						gameState = "menu";
 						setupMenu();
 						revalidate();
-						render();
+						repaint();
 					}
                 }
             }
@@ -2940,28 +2476,12 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 	}
 
     public static void main(String[] args) {
-		JFrame frame = new JFrame("Asteroid Game");
-		AsteroidGame game = new AsteroidGame();
-		
-		// Remove window decorations for seamless web integration
-		frame.setUndecorated(true);
-		
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		frame.setContentPane(game);
-		
-		// Make it resizable and add component listener for auto-resize
-		frame.setResizable(true);
-		frame.addComponentListener(new ComponentAdapter() {
-			@Override
-			public void componentResized(ComponentEvent e) {
-				game.updateDimensions();
-			}
-		});
-		
-		// Set initial size to fill browser viewport
-		Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-		frame.setSize(screenSize.width, screenSize.height);
-		
+        JFrame frame = new JFrame("Asteroid Game");
+        AsteroidGame game = new AsteroidGame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setContentPane(game);
+        frame.pack();
+
 		frame.addKeyListener(new java.awt.event.KeyAdapter() {
 			public void keyPressed(java.awt.event.KeyEvent e) {
 				if (e.getKeyCode() == java.awt.event.KeyEvent.VK_F11) {
@@ -2978,13 +2498,6 @@ public final class AsteroidGame extends JPanel implements ActionListener, KeyLis
 			}
 		});
 		
-		frame.setVisible(true);
-
-		// Initialize BufferStrategy after frame is visible
-        // Use invokeLater to ensure everything is fully initialized
-        SwingUtilities.invokeLater(() -> {
-            game.initBufferStrategy();
-            game.requestFocusInWindow(); // Ensure game panel has focus
-        });
-	}
+        frame.setVisible(true);
+    }
 }
